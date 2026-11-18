@@ -1,0 +1,335 @@
+import type {
+  BrandCampaign,
+  Campaign,
+  Creator,
+  InboxMessage,
+  WorkItem,
+} from "../types";
+
+export const creators: Creator[] = [
+  {
+    id: 1,
+    name: "Aarohi Mehta",
+    handle: "@aarohi.edits",
+    city: "Mumbai",
+    niche: "Fashion · Beauty",
+    followers: "248K",
+    followersCount: 248000,
+    engagement: "5.8%",
+    views: "182K",
+    price: "₹28K",
+    priceValue: 28000,
+    match: 96,
+    image:
+      "https://images.unsplash.com/photo-1747264464985-2bc2e20c739e?crop=faces&fit=crop&w=800&h=1040&q=90",
+    available: true,
+    category: "influencer",
+    tags: ["Fashion", "Beauty", "UGC"],
+  },
+  {
+    id: 2,
+    name: "Rhea Kapoor",
+    handle: "@rheatravels",
+    city: "Delhi",
+    niche: "Travel · Lifestyle",
+    followers: "186K",
+    followersCount: 186000,
+    engagement: "7.2%",
+    views: "156K",
+    price: "₹22K",
+    priceValue: 22000,
+    match: 93,
+    image:
+      "https://images.unsplash.com/photo-1747205894500-7ca9b76fed0e?crop=faces&fit=crop&w=800&h=1040&q=90",
+    available: true,
+    category: "influencer",
+    tags: ["Travel", "Lifestyle", "Nearby"],
+  },
+  {
+    id: 3,
+    name: "Maya Sharma",
+    handle: "@mayamakes",
+    city: "Bengaluru",
+    niche: "UGC · Wellness",
+    followers: "92K",
+    followersCount: 92000,
+    engagement: "8.4%",
+    views: "104K",
+    price: "₹16K",
+    priceValue: 16000,
+    match: 91,
+    image:
+      "https://images.unsplash.com/photo-1582797536372-862bb193b69a?crop=faces&fit=crop&w=800&h=1040&q=90",
+    available: true,
+    category: "ugc",
+    tags: ["UGC", "Wellness", "Fashion"],
+  },
+  {
+    id: 4,
+    name: "Kiara Rao",
+    handle: "@kiaraonfilm",
+    city: "Pune",
+    niche: "Beauty · Video",
+    followers: "312K",
+    followersCount: 312000,
+    engagement: "4.9%",
+    views: "224K",
+    price: "₹34K",
+    priceValue: 34000,
+    match: 88,
+    image:
+      "https://images.unsplash.com/photo-1716504628204-47f2df8d2634?crop=faces&fit=crop&w=800&h=1040&q=90",
+    available: false,
+    category: "affiliate",
+    tags: ["Beauty", "Video", "Affiliate"],
+  },
+];
+
+export const campaigns: Campaign[] = [
+  {
+    id: "camp-1",
+    title: "Monsoon Skin Reset",
+    brand: "Nura Beauty",
+    pay: "₹24K",
+    type: "2 Reels + Stories",
+    color: "#e9d7ff",
+    icon: "N",
+    tags: ["Fashion", "UGC", "Beauty"],
+    applyBy: "26 Jun",
+    match: 95,
+  },
+  {
+    id: "camp-2",
+    title: "Everyday Active",
+    brand: "Flex Society",
+    pay: "₹18K",
+    type: "UGC video",
+    color: "#d7f28f",
+    icon: "F",
+    tags: ["UGC", "Nearby"],
+    applyBy: "26 Jun",
+    match: 93,
+  },
+  {
+    id: "camp-3",
+    title: "Mumbai Food Trail",
+    brand: "Zesty",
+    pay: "₹16K",
+    type: "1 Reel + Visit",
+    color: "#ffd66b",
+    icon: "Z",
+    tags: ["Nearby", "Lifestyle"],
+    applyBy: "28 Jun",
+    match: 90,
+  },
+  {
+    id: "camp-4",
+    title: "Glow From Within",
+    brand: "Plum",
+    pay: "₹32K",
+    type: "1 Reel + 2 Stories",
+    color: "#ffd8df",
+    icon: "P",
+    tags: ["Fashion", "Beauty", "Affiliate"],
+    applyBy: "30 Jun",
+    match: 89,
+  },
+];
+
+export const brandCampaigns: BrandCampaign[] = [
+  {
+    id: "bc-1",
+    title: "Summer Edit 2025",
+    brand: "The Loom",
+    status: "active",
+    progress: 72,
+    creatorsConfirmed: "6 of 8 creators confirmed",
+    due: "28 Jun",
+    deliverables: "12 deliverables",
+    needsAttention: "3 submissions to review",
+  },
+  {
+    id: "bc-2",
+    title: "Monsoon Stories",
+    brand: "Nura Beauty",
+    status: "applications",
+    progress: 35,
+    creatorsConfirmed: "4 applications pending",
+    due: "02 Jul",
+    deliverables: "8 deliverables",
+    needsAttention: "2 responses expiring soon",
+  },
+  {
+    id: "bc-3",
+    title: "Festive Drop",
+    brand: "The Loom",
+    status: "completed",
+    progress: 100,
+    creatorsConfirmed: "10 creators completed",
+    due: "12 May",
+    deliverables: "20 deliverables",
+  },
+];
+
+export const inboxMessages: InboxMessage[] = [
+  {
+    id: "msg-1",
+    creatorId: 1,
+    preview: "I’ve uploaded the revised cut for review.",
+    campaign: "Summer Edit 2025",
+    time: "2m",
+    unread: 2,
+    category: "campaigns",
+  },
+  {
+    id: "msg-2",
+    creatorId: 2,
+    preview: "Thanks! The 28th works perfectly.",
+    campaign: "Monsoon Stories",
+    time: "1h",
+    unread: 1,
+    category: "campaigns",
+  },
+  {
+    id: "msg-3",
+    creatorId: 3,
+    preview: "Your payment has been processed.",
+    campaign: "Monsoon Stories",
+    time: "Yesterday",
+    unread: 0,
+    category: "general",
+  },
+];
+
+export const creatorWorkItems: WorkItem[] = [
+  {
+    id: "work-1",
+    brand: "The Loom",
+    title: "Summer Edit 2025",
+    status: "Content review",
+    progress: 75,
+    color: "#dfff4f",
+    due: "28 Jun",
+    bucket: "active",
+  },
+  {
+    id: "work-2",
+    brand: "Nura Beauty",
+    title: "Monsoon Skin Reset",
+    status: "Draft in progress",
+    progress: 45,
+    color: "#c9bcff",
+    due: "31 Jun",
+    bucket: "active",
+  },
+  {
+    id: "work-3",
+    brand: "Flex Society",
+    title: "Everyday Active",
+    status: "Product shipped",
+    progress: 25,
+    color: "#ffcf91",
+    due: "03 Jul",
+    bucket: "active",
+  },
+  {
+    id: "work-4",
+    brand: "Zesty",
+    title: "Mumbai Food Trail",
+    status: "Awaiting brand reply",
+    progress: 10,
+    color: "#ffe08a",
+    due: "05 Jul",
+    bucket: "applications",
+  },
+  {
+    id: "work-5",
+    brand: "Plum",
+    title: "Glow From Within",
+    status: "Delivered",
+    progress: 100,
+    color: "#d7f28f",
+    due: "10 May",
+    bucket: "completed",
+  },
+];
+
+export const DELIVERABLES = [
+  {
+    id: "reel",
+    title: "Instagram Reel",
+    detail: "Up to 60 sec · 1 revision",
+    multiplier: 1,
+  },
+  {
+    id: "bundle",
+    title: "Reel + 3 Stories",
+    detail: "Campaign bundle · 1 revision",
+    multiplier: 1.5,
+  },
+] as const;
+
+export const PLATFORM_FEE_RATE = 0.08;
+
+export const brandSteps = [
+  ["Welcome to Brand Onboarding", "Let’s build a profile creators will want to work with."],
+  ["Business Information", "Tell us what your business is called and how it operates."],
+  ["Business Details", "Add your digital presence, industry, and headquarters."],
+  [
+    "Face Verification",
+    "Verify the authorised representative with a quick, private liveness check.",
+  ],
+  ["About Your Business", "Help creators understand your story and purpose."],
+  ["Products & Services", "What do you offer, and what makes it different?"],
+  ["Target Audience", "Describe the customers you want creators to reach."],
+  ["Social Media Accounts", "Connect the official channels your brand uses."],
+  ["Social Account Verification", "Confirm ownership to earn a verified business badge."],
+  ["Marketing Goals", "Choose the outcomes that matter most right now."],
+  ["Influencer Categories", "Select creator niches relevant to your business."],
+  ["Creator Type Preferences", "Choose the audience sizes that fit your strategy."],
+  ["Target Locations", "Where should your campaigns reach people?"],
+  ["Preferred Languages", "Choose languages creators should communicate in."],
+  ["Campaign Requirements", "Select your most common formats and collaboration needs."],
+  ["Marketing Budget", "Set a comfortable campaign investment range."],
+  ["Number of Creators", "How many creators do you usually need per campaign?"],
+  ["Collaboration Preferences", "Choose the partnership models you support."],
+  ["AI Business Analysis", "We’re turning your answers into a distribution profile."],
+  ["Review Your Profile", "Check your information before creating your workspace."],
+  ["Onboarding Complete", "Your brand workspace and recommendations are ready."],
+] as const;
+
+export const creatorSteps = [
+  ["Welcome to Creator Onboarding", "Let’s build a profile that helps the right brands find you."],
+  ["Personal Information", "Add the name and identity your audience knows."],
+  ["Face Verification", "Protect your profile and earn trust with a secure liveness check."],
+  ["Location Details", "Tell brands where you create and can collaborate."],
+  ["Creator Category", "Choose the niche that best represents your work."],
+  ["Content Categories", "Add other topics you regularly create content about."],
+  ["Social Media Accounts", "Connect the channels where you publish content."],
+  ["Social Account Verification", "Confirm account ownership and import available metrics."],
+  ["Audience Information", "Share the size and makeup of your community."],
+  ["Content Performance", "Add metrics that help brands understand your impact."],
+  ["Content Portfolio", "Showcase the work you are most proud of."],
+  ["Previous Collaborations", "Add brands and campaigns you have worked with."],
+  ["Content Formats", "Choose the deliverables you can create."],
+  ["Collaboration Preferences", "Select the partnership models you accept."],
+  ["Preferred Brand Categories", "Tell us which industries you want to work with."],
+  ["Preferred Platforms", "Choose where you want to run collaborations."],
+  ["Pricing Preferences", "Set starting prices for your key deliverables."],
+  ["Availability", "Tell brands when you can take on new work."],
+  ["Payment Information", "Add secure payout details for completed work."],
+  ["AI Creator Profile Analysis", "We’re analysing your profile, audience, and content fit."],
+  ["Onboarding Complete", "Your creator profile is ready to meet the right brands."],
+] as const;
+
+export function parseFollowers(label: string): number {
+  const cleaned = label.trim().toUpperCase();
+  if (cleaned.endsWith("K")) return Math.round(parseFloat(cleaned) * 1000);
+  if (cleaned.endsWith("L")) return Math.round(parseFloat(cleaned) * 100000);
+  if (cleaned.endsWith("M")) return Math.round(parseFloat(cleaned) * 1000000);
+  return Number(cleaned.replace(/[^\d.]/g, "")) || 0;
+}
+
+export function formatInr(value: number): string {
+  return `₹${value.toLocaleString("en-IN")}`;
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Orbitly</string>
+    <string name="title_activity_main">Orbitly</string>
+    <string name="package_name">com.orbitly.creator</string>
+    <string name="custom_url_scheme">com.orbitly.creator</string>
+</resources>
