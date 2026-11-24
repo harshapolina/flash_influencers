@@ -5,6 +5,9 @@ export type User = {
   name: string;
   email: string;
   passwordHash: string;
+  googleId?: string;
+  avatarUrl?: string;
+  authProvider?: "password" | "google" | "apple";
   role: Role;
   emailVerified: boolean;
   onboardingDone: boolean;

@@ -16,6 +16,23 @@ export function fail(res: Response, error: unknown, status = 400) {
   return res.status(status).json({ error: message });
 }
 
+function publicProfile(profile: Record<string, unknown>) {
+  const social = profile.social;
+  if (!social || typeof social !== "object") return profile;
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(social as Record<string, unknown>)) {
+    if (value && typeof value === "object") {
+      const copy = { ...(value as Record<string, unknown>) };
+      delete copy.accessToken;
+      delete copy.tokenExpiresAt;
+      cleaned[key] = copy;
+    } else {
+      cleaned[key] = value;
+    }
+  }
+  return { ...profile, social: cleaned };
+}
+
 export function publicUser(user: {
   id: string;
   name: string;
@@ -26,6 +43,9 @@ export function publicUser(user: {
   onboardingStep: number;
   onboardingPhase: string;
   profile: Record<string, unknown>;
+  avatarUrl?: string;
+  authProvider?: string;
+  googleId?: string;
 }) {
   return {
     id: user.id,
@@ -36,6 +56,8 @@ export function publicUser(user: {
     onboardingDone: user.onboardingDone,
     onboardingStep: user.onboardingStep,
     onboardingPhase: user.onboardingPhase,
-    profile: user.profile,
+    profile: publicProfile(user.profile),
+    avatarUrl: user.avatarUrl,
+    authProvider: user.authProvider || "password",
   };
 }

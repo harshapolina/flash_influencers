@@ -4,6 +4,8 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { store } from "../db/store.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { verifyGoogleIdToken } from "../services/googleAuth.js";
+import { sendOtpEmail } from "../services/mail.js";
 import { fail, ok, publicUser } from "../utils/http.js";
 import {
   generateOtp,
@@ -35,6 +37,7 @@ authRouter.post("/register", async (req, res) => {
       name: body.name.trim(),
       email,
       passwordHash: await hashPassword(body.password),
+      authProvider: "password" as const,
       role: body.role,
       emailVerified: false,
       onboardingDone: false,
@@ -58,16 +61,90 @@ authRouter.post("/register", async (req, res) => {
 authRouter.post("/login", async (req, res) => {
   try {
     const body = z
-      .object({ email: z.string().email(), password: z.string().min(1) })
+      .object({
+        email: z.string().email(),
+        password: z.string().min(1),
+        role: z.enum(["brand", "creator"]).optional(),
+      })
       .parse(req.body);
     const user = await store.findUserByEmail(body.email.toLowerCase().trim());
-    if (!user || !(await verifyPassword(body.password, user.passwordHash))) {
+    if (!user || !user.passwordHash) {
+      return fail(res, new Error("Invalid email or password"), 401);
+    }
+    if (!(await verifyPassword(body.password, user.passwordHash))) {
       return fail(res, new Error("Invalid email or password"), 401);
     }
     const token = await signToken({ sub: user.id, role: user.role, email: user.email });
     return ok(res, { token, user: publicUser(user) });
   } catch (error) {
     return fail(res, error);
+  }
+});
+
+authRouter.post("/google", async (req, res) => {
+  try {
+    const body = z
+      .object({
+        idToken: z.string().min(20),
+        role: z.enum(["brand", "creator"]).optional(),
+      })
+      .parse(req.body);
+
+    const profile = await verifyGoogleIdToken(body.idToken);
+    if (!profile.emailVerified) {
+      return fail(res, new Error("Google email is not verified"), 403);
+    }
+
+    let user =
+      (await store.findUserByGoogleId(profile.sub)) ||
+      (await store.findUserByEmail(profile.email));
+
+    const now = new Date().toISOString();
+    if (!user) {
+      if (!body.role) {
+        return ok(res, {
+          needsRole: true,
+          email: profile.email,
+          name: profile.name,
+          picture: profile.picture,
+        });
+      }
+      user = {
+        id: nanoid(),
+        name: profile.name,
+        email: profile.email,
+        passwordHash: "",
+        googleId: profile.sub,
+        avatarUrl: profile.picture,
+        authProvider: "google",
+        role: body.role,
+        emailVerified: true,
+        onboardingDone: false,
+        onboardingStep: 0,
+        onboardingPhase: "common",
+        profile: {},
+        createdAt: now,
+        updatedAt: now,
+      };
+      await store.createUser(user);
+      await store.ensurePrefs(user.id, {});
+    } else {
+      user = await store.updateUser(user.id, {
+        googleId: profile.sub,
+        avatarUrl: profile.picture || user.avatarUrl,
+        name: user.name || profile.name,
+        emailVerified: true,
+        authProvider: user.authProvider === "password" ? "password" : "google",
+        ...(body.role && !user.onboardingDone ? { role: body.role } : {}),
+        updatedAt: now,
+      });
+    }
+
+    if (!user) return fail(res, new Error("Unable to complete Google sign-in"), 500);
+    const token = await signToken({ sub: user.id, role: user.role, email: user.email });
+    return ok(res, { token, user: publicUser(user) });
+  } catch (error) {
+    return fail(res, error, 401);
   }
 });
 
@@ -91,13 +168,24 @@ authRouter.post("/otp/send", async (req, res) => {
       attempts: 0,
     });
 
-    console.log(`[OTP] ${email} => ${code} (expires ${expiresAt})`);
+    const mail = await sendOtpEmail(email, code, body.purpose);
 
     return ok(res, {
       ok: true,
       expiresInSec: Math.floor(config.otpTtlMs / 1000),
-      ...(config.isDev ? { devCode: code } : {}),
-      message: `Verification code sent to ${email}`,
+      message: mail.delivered
+        ? `Verification code sent to ${email}`
+        : `Verification code generated for ${email}. Configure SMTP to deliver email.`,
+      delivered: mail.delivered,
+      ...(config.isDev
+        ? {
+            previewUrl: mail.previewUrl,
+            // In local/dev always return code when email transport is unavailable
+            ...(!mail.delivered || process.env.OTP_EXPOSE_DEV_CODE === "true"
+              ? { devCode: code }
+              : {}),
+          }
+        : {}),
     });
   } catch (error) {
     return fail(res, error);
@@ -162,6 +250,7 @@ authRouter.post("/demo-login", async (req, res) => {
         name,
         email,
         passwordHash: await hashPassword("orbitly2025"),
+        authProvider: "password",
         role: body.role,
         emailVerified: true,
         onboardingDone: true,

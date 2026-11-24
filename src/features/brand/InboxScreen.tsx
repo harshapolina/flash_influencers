@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { creators } from "../../data";
 import { api } from "../../lib/api";
 import { Icon } from "../../lib/icons";
 import { StatusBar } from "../../components/ui/StatusBar";
@@ -60,21 +59,33 @@ export function InboxScreen() {
       </div>
       <div className="messages">
         {messages.map((msg) => {
-          const creator = creators.find((c) => c.id === msg.creatorId) ?? creators[0];
           return (
-            <div className="message-row" key={msg.id}>
+            <button
+              className="message-row"
+              type="button"
+              key={msg.id}
+              onClick={() => {
+                if (msg.unread > 0) {
+                  void api.markMessageRead(msg.id).then(() =>
+                    setMessages((prev) =>
+                      prev.map((m) => (m.id === msg.id ? { ...m, unread: 0 } : m)),
+                    ),
+                  ).then(() => setUnreadCount((c) => Math.max(0, c - msg.unread)));
+                }
+              }}
+            >
               <div className="message-avatar">
-                <img src={creator.image} alt="" />
+                <img src={msg.creatorImage || ""} alt="" />
                 {msg.unread > 0 && <i />}
               </div>
               <div>
-                <strong>{creator.name}</strong>
+                <strong>{msg.creatorName || "Creator"}</strong>
                 <p>{msg.preview}</p>
                 <small>{msg.campaign}</small>
               </div>
               <span>{msg.time}</span>
               {msg.unread > 0 && <b>{msg.unread}</b>}
-            </div>
+            </button>
           );
         })}
         {!messages.length && (

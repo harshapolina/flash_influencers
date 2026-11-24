@@ -11,6 +11,8 @@ import { creatorsRouter } from "./routes/creators.js";
 import { earningsRouter } from "./routes/earnings.js";
 import { messagesRouter } from "./routes/messages.js";
 import { onboardingRouter } from "./routes/onboarding.js";
+import { placesRouter } from "./routes/places.js";
+import { socialRouter } from "./routes/social.js";
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -32,6 +34,8 @@ app.use("/api/campaigns", campaignsRouter);
 app.use("/api/bookings", bookingsRouter);
 app.use("/api/messages", messagesRouter);
 app.use("/api/earnings", earningsRouter);
+app.use("/api/places", placesRouter);
+app.use("/api/social", socialRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
@@ -45,6 +49,7 @@ async function start() {
 
   app.listen(config.port, () => {
     console.log(`Orbitly API listening on http://localhost:${config.port}`);
+    if (config.smtp.user) console.log(`[mail] SMTP account configured`);
   });
 }
 

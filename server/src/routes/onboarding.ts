@@ -23,7 +23,7 @@ onboardingRouter.patch("/progress", async (req: AuthedRequest, res) => {
     const current = await store.findUserById(req.user!.id);
     if (!current) throw new Error("User not found");
 
-    let profile = current.profile;
+    let profile: Record<string, unknown> = { ...(current.profile || {}) };
     if (body.profile) profile = { ...profile, ...body.profile };
     if (body.answers) {
       const prev = (profile.answers as Record<string, unknown>) || {};
@@ -58,7 +58,7 @@ onboardingRouter.post("/complete", async (req: AuthedRequest, res) => {
 
     const fresh = await store.updateUser(req.user!.id, {
       ...(body.role ? { role: body.role } : {}),
-      profile: body.profile ? { ...current.profile, ...body.profile } : current.profile,
+      profile: body.profile ? { ...(current.profile || {}), ...body.profile } : current.profile || {},
       onboardingDone: true,
       emailVerified: true,
       updatedAt: new Date().toISOString(),

@@ -10,6 +10,7 @@ export function CreatorWorkScreen({ onOpenOpportunities }: { onOpenOpportunities
   const [tab, setTab] = useState<WorkTab>("active");
   const [list, setList] = useState<WorkItem[]>([]);
   const [counts, setCounts] = useState({ active: 0, applications: 0, completed: 0 });
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -60,16 +61,18 @@ export function CreatorWorkScreen({ onOpenOpportunities }: { onOpenOpportunities
           </button>
         ))}
       </div>
-      {tab === "active" && (
+      {tab === "active" && list[0] && (
         <section className="next-deadline">
           <div className="deadline-date">
-            <strong>28</strong>
-            <span>JUN</span>
+            <strong>{list[0].due.split(" ")[0] || "—"}</strong>
+            <span>{(list[0].due.split(" ")[1] || "").toUpperCase()}</span>
           </div>
           <div>
-            <span>NEXT DEADLINE · TOMORROW</span>
-            <strong>Submit final reel</strong>
-            <small>The Loom · Summer Edit 2025</small>
+            <span>NEXT DEADLINE</span>
+            <strong>{list[0].status}</strong>
+            <small>
+              {list[0].brand} · {list[0].title}
+            </small>
           </div>
           <button type="button">
             <Icon name="chevron" size={15} />
@@ -102,10 +105,15 @@ export function CreatorWorkScreen({ onOpenOpportunities }: { onOpenOpportunities
                   <Icon name="calendar" size={12} />
                   Due {item.due}
                 </span>
-                <button type="button">
+                <button type="button" onClick={() => setOpenId(openId === item.id ? null : item.id)}>
                   Open campaign <Icon name="arrow" size={13} />
                 </button>
               </footer>
+              {openId === item.id && (
+                <p>
+                  {item.brand} · {item.title}. Status {item.status}, {item.progress}% complete, due {item.due}.
+                </p>
+              )}
             </div>
           </article>
         ))}

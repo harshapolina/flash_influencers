@@ -79,6 +79,8 @@ export type BrandCampaign = {
 export type InboxMessage = {
   id: string;
   creatorId: number;
+  creatorName?: string;
+  creatorImage?: string;
   preview: string;
   campaign: string;
   time: string;

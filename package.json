@@ -8,19 +8,22 @@
     "dev:api": "npm --prefix server run dev",
     "dev:all": "npm run dev:api & npm run dev",
     "seed": "npm --prefix server run seed",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.2",
     "@capacitor/cli": "^8.6.2",
     "@capacitor/core": "^8.6.2",
+    "google-auth-library": "^11.3.4",
+    "nodemailer": "^10.6.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",

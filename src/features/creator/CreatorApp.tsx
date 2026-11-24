@@ -19,6 +19,7 @@ export function CreatorApp() {
           <CreatorHomeScreen
             onExplore={() => setTab("Opportunities")}
             onWork={() => setTab("Work")}
+            onEarnings={() => setTab("Earnings")}
           />
         )}
         {tab === "Opportunities" && <CreatorOpportunitiesScreen />}

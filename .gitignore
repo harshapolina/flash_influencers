@@ -4,6 +4,8 @@ server/node_modules/
 
 # builds
 dist/
+*.tsbuildinfo
+
 android/app/build/
 android/build/
 android/.gradle/

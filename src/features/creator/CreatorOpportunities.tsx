@@ -13,6 +13,8 @@ export function CreatorOpportunitiesScreen() {
   const [pill, setPill] = useState<(typeof PILLS)[number]>("For you");
   const [savedOnly, setSavedOnly] = useState(false);
   const [list, setList] = useState<Campaign[]>([]);
+  const [brief, setBrief] = useState<Campaign | null>(null);
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -51,9 +53,11 @@ export function CreatorOpportunitiesScreen() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search brands or campaigns"
         />
-        <button type="button">
+        <button
+          type="button"
+          onClick={() => setPill(PILLS[(PILLS.indexOf(pill) + 1) % PILLS.length])}
+        >
           <Icon name="filter" size={17} />
-          <i>3</i>
         </button>
       </div>
       <div className="pills creator-pills">
@@ -97,7 +101,7 @@ export function CreatorOpportunitiesScreen() {
                 <span className="campaign-brand-mark">{campaign.icon}</span>
                 <span className="feed-match">
                   <Icon name="sparkles" size={10} />
-                  {campaign.match ?? 90}%
+                  {typeof campaign.match === "number" ? `${campaign.match}%` : "Open"}
                 </span>
                 <button type="button" onClick={() => void toggleSaveCampaign(campaign.id)}>
                   <Icon name="bookmark" size={16} fill={saved} />
@@ -126,7 +130,7 @@ export function CreatorOpportunitiesScreen() {
                     <small>CREATOR PAY</small>
                     <strong>{campaign.pay}</strong>
                   </div>
-                  <button type="button" onClick={() => void applyCampaign(campaign.id)}>
+                  <button type="button" onClick={() => setBrief(campaign)}>
                     {applied ? "Applied" : "View brief"} <Icon name="arrow" size={14} />
                   </button>
                 </footer>
@@ -134,6 +138,34 @@ export function CreatorOpportunitiesScreen() {
             </article>
           );
         })}
+        {brief && (
+          <article>
+            <div className="campaign-feed-copy">
+              <span>{brief.brand}</span>
+              <h3>{brief.title}</h3>
+              <p>
+                {brief.type} · {brief.pay} · Apply by {brief.applyBy}
+              </p>
+              {notice && <p>{notice}</p>}
+              <footer>
+                <button type="button" onClick={() => setBrief(null)}>
+                  Close
+                </button>
+                <button
+                  type="button"
+                  disabled={state.appliedCampaignIds.includes(brief.id)}
+                  onClick={() => {
+                    void applyCampaign(brief.id)
+                      .then(() => setNotice("Application sent. It is now in Work."))
+                      .catch(() => setNotice("Could not send the application."));
+                  }}
+                >
+                  {state.appliedCampaignIds.includes(brief.id) ? "Applied" : "Apply"}
+                </button>
+              </footer>
+            </div>
+          </article>
+        )}
         {!list.length && (
           <div className="empty" style={{ padding: 40 }}>
             <h3>No opportunities</h3>

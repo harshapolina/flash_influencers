@@ -4,7 +4,7 @@ import { CreatorApp } from "./features/creator/CreatorApp";
 import { AppStoreProvider, useAppStore } from "./store/AppStore";
 
 function AuthGate() {
-  const { state, completeOnboarding, demoEnter } = useAppStore();
+  const { state, completeOnboarding } = useAppStore();
 
   if (state.bootstrapping) {
     return (
@@ -20,7 +20,7 @@ function AuthGate() {
     return (
       <div className="stage">
         <div className="mobile-app">
-          <FullOnboarding onFinish={completeOnboarding} onDemoEnter={demoEnter} />
+          <FullOnboarding onFinish={completeOnboarding} />
         </div>
       </div>
     );

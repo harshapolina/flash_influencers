@@ -1,99 +1,83 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { brandSteps, creatorSteps, creators } from "../../data";
-import { api, LOCAL_TOKEN, setToken, type ApiUser } from "../../lib/api";
+import { api, setToken, type PlaceResult, type SocialAccount } from "../../lib/api";
+import { requestGoogleIdToken } from "../../lib/googleAuth";
 import { Icon } from "../../lib/icons";
 import { useAppStore } from "../../store/AppStore";
 import type { IconName, OnboardingRole } from "../../types";
 import { StatusBar } from "../../components/ui/StatusBar";
-
-type SocialProvider = "google" | "apple";
-
-type SocialAccount = {
-  id: string;
-  name: string;
-  email: string;
-  avatar: string;
-};
-
-const GOOGLE_ACCOUNTS: SocialAccount[] = [
-  {
-    id: "g-brand",
-    name: "Neha Kapoor",
-    email: "neha.kapoor@gmail.com",
-    avatar: creators[1]?.image || creators[0].image,
-  },
-  {
-    id: "g-creator",
-    name: "Aarohi Mehta",
-    email: "aarohi.mehta@gmail.com",
-    avatar: creators[0].image,
-  },
-];
-
-const APPLE_ACCOUNTS: SocialAccount[] = [
-  {
-    id: "a-brand",
-    name: "Neha Kapoor",
-    email: "neha.hide@icloud.com",
-    avatar: creators[1]?.image || creators[0].image,
-  },
-  {
-    id: "a-creator",
-    name: "Aarohi Mehta",
-    email: "aarohi.hide@icloud.com",
-    avatar: creators[0].image,
-  },
-];
-
-function draftUser(input: {
-  name: string;
-  email: string;
-  role: OnboardingRole;
-  onboardingDone?: boolean;
-}): ApiUser {
-  return {
-    id: `local-${input.role}`,
-    name: input.name,
-    email: input.email,
-    role: input.role,
-    emailVerified: true,
-    onboardingDone: input.onboardingDone ?? false,
-    onboardingStep: 0,
-    onboardingPhase: "role",
-    profile: {},
-  };
-}
+import { SocialConnect } from "./SocialConnect";
 
 export function FullOnboarding({
   onFinish,
-  onDemoEnter,
 }: {
   onFinish: (role: OnboardingRole) => void | Promise<void>;
-  onDemoEnter?: (role: OnboardingRole) => void | Promise<void>;
 }) {
-  const { setUser, login } = useAppStore();
+  const { setUser, login, googleLogin } = useAppStore();
   const [phase, setPhase] = useState<"common" | "role" | "login">("common");
   const [step, setStep] = useState(0);
   const [role, setRole] = useState<OnboardingRole>("brand");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<Record<string, string[]>>({});
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [showPassword, setShowPassword] = useState(false);
-  const [fullName, setFullName] = useState("Neha Kapoor");
-  const [email, setEmail] = useState("neha@theloom.in");
-  const [password, setPassword] = useState("orbitly2025");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [devCode, setDevCode] = useState("");
-  const [otpSeconds, setOtpSeconds] = useState(278);
-  const [socialProvider, setSocialProvider] = useState<SocialProvider | null>(null);
+  const [otpHint, setOtpHint] = useState("");
+  const [otpSeconds, setOtpSeconds] = useState(300);
   const [agreed, setAgreed] = useState(true);
+  const [introSlide, setIntroSlide] = useState(0);
+  const [verifyChannel, setVerifyChannel] = useState<"email" | "phone">("email");
   const steps = role === "brand" ? brandSteps : creatorSteps;
   const current = steps[step];
 
+  const stepTitle = phase === "role" ? steps[step]?.[0] || "" : "";
+  const selected = answers[stepTitle] || [];
   const toggle = (value: string) =>
-    setSelected((items) =>
-      items.includes(value) ? items.filter((item) => item !== value) : [...items, value],
-    );
+    setAnswers((items) => {
+      const current = items[stepTitle] || [];
+      const next = current.includes(value)
+        ? current.filter((item) => item !== value)
+        : [...current, value];
+      return { ...items, [stepTitle]: next };
+    });
+  const setField = (key: string, value: string) =>
+    setFields((current) => ({ ...current, [key]: value }));
+
+  useEffect(() => {
+    api
+      .me()
+      .then(({ user }) => {
+        const savedAnswers = user.profile?.answers;
+        const savedFields = user.profile?.fields;
+        if (savedAnswers && typeof savedAnswers === "object") {
+          setAnswers(savedAnswers as Record<string, string[]>);
+        }
+        const nextFields =
+          savedFields && typeof savedFields === "object" ? { ...(savedFields as Record<string, string>) } : {};
+        if (user.name && !nextFields["Personal Information:LEGAL NAME"]) {
+          nextFields["Personal Information:LEGAL NAME"] = user.name;
+        }
+        if (user.name && !nextFields["Personal Information:DISPLAY NAME"]) {
+          nextFields["Personal Information:DISPLAY NAME"] = user.name.split(" ")[0] || user.name;
+        }
+        setFields(nextFields);
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveProgress = async (nextStep: number) => {
+    await api.saveOnboardingProgress({
+      phase: "role",
+      step: nextStep,
+      role,
+      answers: { ...answers, [steps[step][0]]: answers[steps[step][0]] || [] },
+      profile: { fields },
+    });
+  };
 
   const advanceCommon = () => {
     setError("");
@@ -118,14 +102,10 @@ export function FullOnboarding({
       }
     } else {
       try {
-        await api.saveOnboardingProgress({
-          phase: "role",
-          step: step + 1,
-          role,
-          answers: { [current[0]]: selected },
-        });
-      } catch {
-        // allow offline progression if token missing mid-flow
+        await saveProgress(step + 1);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not save progress");
+        return;
       }
       setStep((value) => value + 1);
     }
@@ -151,41 +131,48 @@ export function FullOnboarding({
       });
       setToken(token);
       setUser(user, token);
-      try {
-        await api.saveOnboardingProgress({ phase: "common", step: 4, role });
-      } catch {
-        // continue locally if progress sync fails
-      }
+      await api.saveOnboardingProgress({ phase: "common", step: 4, role });
       advanceCommon();
-    } catch {
-      setToken(LOCAL_TOKEN);
-      setUser(
-        draftUser({ name: fullName.trim(), email: email.trim(), role, onboardingDone: false }),
-        LOCAL_TOKEN,
-      );
-      advanceCommon();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create account");
     } finally {
       setBusy(false);
     }
   };
 
+  useEffect(() => {
+    if (phase !== "common" || step !== 5) return;
+    const timer = window.setInterval(() => {
+      setOtpSeconds((seconds) => (seconds > 0 ? seconds - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [phase, step]);
+
   const sendCode = async () => {
+    if (verifyChannel === "phone") {
+      setError("SMS isn’t connected yet. Choose email and we’ll send a real code to your inbox.");
+      return;
+    }
+    if (!email.trim()) {
+      setError("Enter the email on your account before sending a code.");
+      return;
+    }
+    const leavingChoice = step === 4;
     setBusy(true);
     setError("");
+    setOtpHint("");
     try {
-      const res = await api.sendOtp(email);
-      if (res.devCode) {
-        setDevCode(res.devCode);
-        setOtp(res.devCode.split(""));
+      const res = await api.sendOtp(email.trim(), "verify");
+      if (!res.delivered) {
+        setError(res.message || "The code could not be emailed. Try again.");
+        return;
       }
       setOtpSeconds(res.expiresInSec || 300);
-      advanceCommon();
-    } catch {
-      const localCode = "123456";
-      setDevCode(localCode);
-      setOtp(localCode.split(""));
-      setOtpSeconds(300);
-      advanceCommon();
+      setOtp(["", "", "", "", "", ""]);
+      setOtpHint(`Code sent to ${email.trim()}. Check your inbox and spam folder.`);
+      if (leavingChoice) advanceCommon();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not send OTP");
     } finally {
       setBusy(false);
     }
@@ -196,84 +183,38 @@ export function FullOnboarding({
     setError("");
     const code = otp.join("");
     try {
-      const res = await api.verifyOtp(email, code);
+      const res = await api.verifyOtp(email.trim(), code);
       if (res.token && res.user) {
         setToken(res.token);
         setUser(res.user, res.token);
       }
       advanceCommon();
-    } catch {
-      if (code === devCode || code === "123456") {
-        setToken(LOCAL_TOKEN);
-        setUser(
-          draftUser({ name: fullName.trim(), email: email.trim(), role, onboardingDone: false }),
-          LOCAL_TOKEN,
-        );
-        advanceCommon();
-      } else {
-        setError("Invalid OTP. Use the code shown, or 123456 offline.");
-      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid OTP");
     } finally {
       setBusy(false);
     }
   };
 
-  const continueWithSocial = async (_provider: SocialProvider, account: SocialAccount) => {
+  const continueWithGoogle = async () => {
     setBusy(true);
     setError("");
-    setFullName(account.name);
-    setEmail(account.email);
-    setPassword("orbitly2025");
-    const inferredRole: OnboardingRole =
-      account.email.includes("aarohi") || account.id.includes("creator") ? "creator" : role;
-    setRole(inferredRole);
-
     try {
-      if (phase === "login") {
-        await login(account.email, "orbitly2025", inferredRole);
-        setSocialProvider(null);
+      const idToken = await requestGoogleIdToken();
+      const result = await googleLogin(idToken, role);
+      if ("needsRole" in result && result.needsRole) {
+        setFullName(result.name);
+        setEmail(result.email);
+        setError("Choose Brand or Creator, then tap Google again.");
         return;
       }
-
-      try {
-        const { token, user } = await api.register({
-          name: account.name,
-          email: account.email,
-          password: "orbitly2025",
-          role: inferredRole,
-        });
-        setToken(token);
-        setUser(user, token);
-      } catch {
-        setToken(LOCAL_TOKEN);
-        setUser(
-          draftUser({
-            name: account.name,
-            email: account.email,
-            role: inferredRole,
-            onboardingDone: false,
-          }),
-          LOCAL_TOKEN,
-        );
+      if (phase === "login") return;
+      if (result && "onboardingDone" in result && !result.onboardingDone) {
+        setPhase("role");
+        setStep(0);
       }
-      setSocialProvider(null);
-      setPhase("role");
-      setStep(0);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Social sign-in failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const enterDemo = async (nextRole: OnboardingRole) => {
-    setBusy(true);
-    setError("");
-    try {
-      if (onDemoEnter) await onDemoEnter(nextRole);
-      else await onFinish(nextRole);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not enter app");
+      setError(e instanceof Error ? e.message : "Google sign-in failed");
     } finally {
       setBusy(false);
     }
@@ -283,7 +224,18 @@ export function FullOnboarding({
     setBusy(true);
     setError("");
     try {
-      await login(email.trim(), password, role);
+      const user = await login(email.trim(), password, role);
+      if (user.onboardingDone) return;
+      setEmail(user.email);
+      setFullName(user.name);
+      setRole(user.role);
+      if (user.onboardingPhase === "role") {
+        setPhase("role");
+        setStep(user.onboardingStep || 0);
+        return;
+      }
+      setPhase("common");
+      setStep(user.emailVerified ? 6 : Math.max(user.onboardingStep || 4, 4));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Invalid email or password");
     } finally {
@@ -294,25 +246,21 @@ export function FullOnboarding({
   const openLogin = (asRole: OnboardingRole = "brand") => {
     setError("");
     setRole(asRole);
-    setEmail(asRole === "brand" ? "neha@theloom.in" : "aarohi@orbitly.app");
-    setPassword("orbitly2025");
+    setEmail("");
+    setPassword("");
     setPhase("login");
-  };
-
-  const quickLogin = async (asRole: OnboardingRole) => {
-    setRole(asRole);
-    setEmail(asRole === "brand" ? "neha@theloom.in" : "aarohi@orbitly.app");
-    setPassword("orbitly2025");
-    await enterDemo(asRole);
   };
 
   const back = () => {
     if (phase === "login") {
       setPhase("common");
-      setStep(1);
+      setStep(2);
       return;
     }
-    if (step > 0) setStep((value) => value - 1);
+    if (step > 0) {
+      if (phase === "role") void saveProgress(step - 1).catch(() => {});
+      setStep((value) => value - 1);
+    }
     else if (phase === "role") {
       setPhase("common");
       setStep(6);
@@ -332,10 +280,7 @@ export function FullOnboarding({
             type="button"
             className={role === "brand" ? "active" : ""}
             disabled={busy}
-            onClick={() => {
-              setRole("brand");
-              setEmail("neha@theloom.in");
-            }}
+            onClick={() => setRole("brand")}
           >
             Brand
           </button>
@@ -343,10 +288,7 @@ export function FullOnboarding({
             type="button"
             className={role === "creator" ? "active" : ""}
             disabled={busy}
-            onClick={() => {
-              setRole("creator");
-              setEmail("aarohi@orbitly.app");
-            }}
+            onClick={() => setRole("creator")}
           >
             Creator
           </button>
@@ -394,40 +336,25 @@ export function FullOnboarding({
           <span>or continue with</span>
         </div>
         <div className="social-buttons">
-          <button type="button" disabled={busy} onClick={() => setSocialProvider("google")}>
+          <button type="button" disabled={busy} onClick={continueWithGoogle}>
             <span className="social-google-mark" aria-hidden>
               G
             </span>
             Google
           </button>
-          <button type="button" disabled={busy} onClick={() => setSocialProvider("apple")}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              setError("Apple Sign-In needs an Apple Developer account. Use Google or email for now.")
+            }
+          >
             <span className="social-apple-mark" aria-hidden>
               ⌘
             </span>
             Apple
           </button>
         </div>
-        <button
-          type="button"
-          className="flow-primary common-action login-demo-btn"
-          disabled={busy}
-          onClick={() => quickLogin(role)}
-        >
-          {busy ? "Opening…" : `Quick enter ${role === "brand" ? "Brand" : "Creator"} dashboard`}
-        </button>
-        <p className="login-hint">
-          Brand demo: neha@theloom.in · Creator demo: aarohi@orbitly.app · password: orbitly2025
-        </p>
-        {socialProvider && (
-          <SocialAuthSheet
-            provider={socialProvider}
-            role={role}
-            busy={busy}
-            accounts={socialProvider === "google" ? GOOGLE_ACCOUNTS : APPLE_ACCOUNTS}
-            onClose={() => setSocialProvider(null)}
-            onPick={(account) => continueWithSocial(socialProvider, account)}
-          />
-        )}
       </CommonShell>
     );
   }
@@ -450,70 +377,94 @@ export function FullOnboarding({
           </div>
           <div className="splash-name">Orbitly</div>
           <p>Creator-powered distribution</p>
-          <div className="splash-skip-row">
-            <button className="flow-skip" type="button" disabled={busy} onClick={() => enterDemo("brand")}>
-              Brand UI
-            </button>
-            <button
-              className="flow-skip"
-              type="button"
-              disabled={busy}
-              onClick={() => enterDemo("creator")}
-            >
-              Creator UI
-            </button>
-          </div>
           <button className="invisible-next" aria-label="Continue" onClick={advanceCommon} />
           <small>Tap anywhere to continue</small>
         </div>
       );
     }
     if (step === 1) {
+      const slides = [
+        {
+          title: (
+            <>
+              Turn influence into <em>real growth.</em>
+            </>
+          ),
+          body: "One trusted platform for brands and creators to find each other, work together, and measure what matters.",
+          chip: "96% match",
+          icon: "sparkles" as const,
+          photos: [0, 1, 2],
+        },
+        {
+          title: (
+            <>
+              Collaborate without <em>the chaos.</em>
+            </>
+          ),
+          body: "Briefs, bookings, and messages stay in one thread, so every partnership has a clear next step.",
+          chip: "Brief ready",
+          icon: "message" as const,
+          photos: [1, 2, 0],
+        },
+        {
+          title: (
+            <>
+              Measure what <em>actually matters.</em>
+            </>
+          ),
+          body: "Reach, spend, and payouts come from live campaigns, not a slide you have to update by hand.",
+          chip: "+18% reach",
+          icon: "trending" as const,
+          photos: [2, 0, 1],
+        },
+      ];
+      const slide = slides[introSlide];
       return (
         <div className="flow-screen intro-flow">
           <StatusBar />
           <button className="flow-skip" onClick={() => setStep(2)}>
             Skip
           </button>
-          <div className="intro-images">
-            <img src={creators[0].image} alt="Creator" />
-            <img src={creators[1].image} alt="Creator" />
-            <img src={creators[2].image} alt="Creator" />
+          <div className={`intro-images slide-${introSlide}`} key={introSlide}>
+            {slide.photos.map((photo, index) => (
+              <img key={`${introSlide}-${index}`} src={creators[photo].image} alt={creators[photo].name} />
+            ))}
             <span>
-              <Icon name="sparkles" size={14} />
-              96% match
+              <Icon name={slide.icon} size={14} />
+              {slide.chip}
             </span>
           </div>
           <div className="intro-copy">
-            <span className="flow-kicker">DISCOVER · COLLABORATE · GROW</span>
-            <h1>
-              Turn influence into <em>real growth.</em>
-            </h1>
-            <p>
-              One trusted platform for brands and creators to find each other, work together, and
-              measure what matters.
-            </p>
+            <span className="flow-kicker intro-kicker">
+              {["DISCOVER", "COLLABORATE", "GROW"].map((word, index) => (
+                <b className={index === introSlide ? "on" : ""} key={word}>
+                  {word}
+                  {index < 2 ? " · " : ""}
+                </b>
+              ))}
+            </span>
+            <h1>{slide.title}</h1>
+            <p>{slide.body}</p>
             <div className="flow-dots">
-              <i className="active" />
-              <i />
-              <i />
+              {slides.map((_, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  className={index === introSlide ? "active" : ""}
+                  aria-label={`Intro ${index + 1}`}
+                  onClick={() => setIntroSlide(index)}
+                />
+              ))}
             </div>
-            <button className="flow-primary" onClick={advanceCommon}>
+            <button
+              className="flow-primary"
+              onClick={() => {
+                if (introSlide < slides.length - 1) setIntroSlide(introSlide + 1);
+                else advanceCommon();
+              }}
+            >
               Continue <Icon name="arrow" size={17} />
             </button>
-            <div className="intro-links">
-              <button className="flow-login" type="button" onClick={() => openLogin("brand")}>
-                Already have an account? <b>Log in</b>
-              </button>
-              <div className="intro-demo-row">
-                <button type="button" className="flow-skip" disabled={busy} onClick={() => quickLogin("brand")}>
-                  Brand login
-                </button>
-                <button type="button" className="flow-skip" disabled={busy} onClick={() => quickLogin("creator")}>
-                  Creator login
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       );
@@ -556,6 +507,19 @@ export function FullOnboarding({
           <button className="flow-primary common-action" onClick={advanceCommon}>
             Continue as {role === "brand" ? "brand" : "creator"} <Icon name="arrow" size={17} />
           </button>
+          <div className="intro-links path-login">
+            <button className="flow-login" type="button" disabled={busy} onClick={() => openLogin(role)}>
+              Already have an account? <b>Log in</b>
+            </button>
+            <div className="intro-demo-row">
+              <button type="button" className="flow-skip" disabled={busy} onClick={() => openLogin("brand")}>
+                Brand login
+              </button>
+              <button type="button" className="flow-skip" disabled={busy} onClick={() => openLogin("creator")}>
+                Creator login
+              </button>
+            </div>
+          </div>
         </CommonShell>
       );
     }
@@ -626,13 +590,19 @@ export function FullOnboarding({
             <span>or continue with</span>
           </div>
           <div className="social-buttons">
-            <button type="button" disabled={busy} onClick={() => setSocialProvider("google")}>
+            <button type="button" disabled={busy} onClick={continueWithGoogle}>
               <span className="social-google-mark" aria-hidden>
                 G
               </span>
               Google
             </button>
-            <button type="button" disabled={busy} onClick={() => setSocialProvider("apple")}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                setError("Apple Sign-In needs an Apple Developer account. Use Google or email for now.")
+              }
+            >
               <span className="social-apple-mark" aria-hidden>
                 ⌘
               </span>
@@ -642,16 +612,6 @@ export function FullOnboarding({
           <button className="flow-login" type="button" disabled={busy} onClick={() => openLogin(role)}>
             Already have an account? <b>Log in</b>
           </button>
-          {socialProvider && (
-            <SocialAuthSheet
-              provider={socialProvider}
-              role={role}
-              busy={busy}
-              accounts={socialProvider === "google" ? GOOGLE_ACCOUNTS : APPLE_ACCOUNTS}
-              onClose={() => setSocialProvider(null)}
-              onPick={(account) => continueWithSocial(socialProvider, account)}
-            />
-          )}
         </CommonShell>
       );
     }
@@ -663,7 +623,11 @@ export function FullOnboarding({
           step={step}
           back={back}
         >
-          <AnimatedVerificationChoice />
+          <AnimatedVerificationChoice
+            email={email}
+            channel={verifyChannel}
+            onChannel={setVerifyChannel}
+          />
           {error && <p className="flow-error">{error}</p>}
           <button className="flow-primary common-action" disabled={busy} onClick={sendCode}>
             {busy ? "Sending…" : "Send verification code"}
@@ -702,11 +666,7 @@ export function FullOnboarding({
               />
             ))}
           </div>
-          {devCode && (
-            <p className="otp-timer">
-              Dev code: <b>{devCode}</b>
-            </p>
-          )}
+          {otpHint && <p className="otp-timer">{otpHint}</p>}
           <p className="otp-timer">
             <Icon name="clock" size={14} /> Code expires in{" "}
             <b>
@@ -807,10 +767,19 @@ export function FullOnboarding({
         ) : isReview ? (
           <ReviewProfile />
         ) : (
-          <OnboardingFields role={role} title={current[0]} selected={selected} toggle={toggle} />
+          <OnboardingFields
+            role={role}
+            title={current[0]}
+            selected={selected}
+            toggle={toggle}
+            fields={fields}
+            setField={setField}
+            onSkipFace={advanceRole}
+          />
         )}
       </main>
       <div className="role-footer">
+        {error && <p className="flow-error">{error}</p>}
         <button className="flow-primary" onClick={advanceRole}>
           {step === 0
             ? "Let’s begin"
@@ -931,8 +900,21 @@ function AnimatedAccountSuccess({
   );
 }
 
-function AnimatedVerificationChoice() {
-  const [channel, setChannel] = useState<"email" | "phone">("email");
+function maskEmail(value: string) {
+  const [name, domain] = value.trim().split("@");
+  if (!name || !domain) return "Add your email";
+  return `${name.slice(0, 1)}•••@${domain}`;
+}
+
+function AnimatedVerificationChoice({
+  email,
+  channel,
+  onChannel,
+}: {
+  email: string;
+  channel: "email" | "phone";
+  onChannel: (channel: "email" | "phone") => void;
+}) {
 
   return (
     <div className={`animated-verification ${channel}`}>
@@ -954,7 +936,7 @@ function AnimatedVerificationChoice() {
 
         <button
           className={`channel-orb email-orb ${channel === "email" ? "active" : ""}`}
-          onClick={() => setChannel("email")}
+          onClick={() => onChannel("email")}
         >
           <span>
             <Icon name="message" size={19} />
@@ -965,7 +947,7 @@ function AnimatedVerificationChoice() {
         </button>
         <button
           className={`channel-orb phone-orb ${channel === "phone" ? "active" : ""}`}
-          onClick={() => setChannel("phone")}
+          onClick={() => onChannel("phone")}
         >
           <span>
             <Icon name="user" size={19} />
@@ -983,28 +965,28 @@ function AnimatedVerificationChoice() {
       </div>
 
       <div className="verification-channels">
-        <button className={channel === "email" ? "active" : ""} onClick={() => setChannel("email")}>
+        <button className={channel === "email" ? "active" : ""} onClick={() => onChannel("email")}>
           <span className="channel-icon">
             <Icon name="message" size={19} />
           </span>
           <p>
             <small>RECOMMENDED</small>
             <strong>Email address</strong>
-            <em>n•••@theloom.in</em>
+            <em>{maskEmail(email)}</em>
           </p>
           <div className="delivery-time">
             <span>Instant</span>
             <i className="verification-radio" />
           </div>
         </button>
-        <button className={channel === "phone" ? "active" : ""} onClick={() => setChannel("phone")}>
+        <button className={channel === "phone" ? "active" : ""} onClick={() => onChannel("phone")}>
           <span className="channel-icon phone">
             <Icon name="user" size={19} />
           </span>
           <p>
             <small>SMS CODE</small>
             <strong>Phone number</strong>
-            <em>+91 ••••• 48210</em>
+            <em>Not added</em>
           </p>
           <div className="delivery-time">
             <span>~10 sec</span>
@@ -1026,67 +1008,6 @@ function AnimatedVerificationChoice() {
           <i />
           <i />
         </div>
-      </div>
-    </div>
-  );
-}
-
-function SocialAuthSheet({
-  provider,
-  role,
-  busy,
-  accounts,
-  onClose,
-  onPick,
-}: {
-  provider: SocialProvider;
-  role: OnboardingRole;
-  busy: boolean;
-  accounts: SocialAccount[];
-  onClose: () => void;
-  onPick: (account: SocialAccount) => void;
-}) {
-  const title = provider === "google" ? "Continue with Google" : "Continue with Apple";
-  const preferred = accounts.filter((account) =>
-    role === "creator" ? account.id.includes("creator") : account.id.includes("brand"),
-  );
-  const ordered = [...preferred, ...accounts.filter((a) => !preferred.includes(a))];
-
-  return (
-    <div className="social-sheet-backdrop" onClick={onClose} role="presentation">
-      <div
-        className="social-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="social-sheet-handle" />
-        <div className="social-sheet-head">
-          <strong>{title}</strong>
-          <p>Choose an account to continue as a {role}.</p>
-        </div>
-        <div className="social-account-list">
-          {ordered.map((account) => (
-            <button
-              key={account.id}
-              type="button"
-              disabled={busy}
-              className="social-account-row"
-              onClick={() => onPick(account)}
-            >
-              <img src={account.avatar} alt="" />
-              <span>
-                <strong>{account.name}</strong>
-                <small>{account.email}</small>
-              </span>
-              <i>{provider === "google" ? "G" : "⌘"}</i>
-            </button>
-          ))}
-        </div>
-        <button type="button" className="social-sheet-cancel" disabled={busy} onClick={onClose}>
-          Cancel
-        </button>
       </div>
     </div>
   );
@@ -1278,11 +1199,17 @@ function OnboardingFields({
   title,
   selected,
   toggle,
+  fields,
+  setField,
+  onSkipFace,
 }: {
   role: OnboardingRole;
   title: string;
   selected: string[];
   toggle: (s: string) => void;
+  fields: Record<string, string>;
+  setField: (key: string, value: string) => void;
+  onSkipFace: () => void;
 }) {
   const pickerMap: Record<string, string[]> = {
     "Marketing Goals": [
@@ -1375,32 +1302,21 @@ function OnboardingFields({
   };
   if (pickerMap[title])
     return <ChipPicker options={pickerMap[title]} selected={selected} toggle={toggle} />;
-  if (title === "Face Verification") return <FaceVerification representative={role === "brand"} />;
-  if (title === "Social Media Accounts")
-    return <SocialConnections creatorMode={role === "creator"} />;
-  if (title === "Social Account Verification")
-    return (
-      <div className="verify-card">
-        <span>
-          <Icon name="instagram" size={29} />
-        </span>
-        <h3>@theloom.in</h3>
-        <p>We’ll open a secure authorisation window. Orbitly never receives your password.</p>
-        <div>
-          <Icon name="shield" size={15} /> Secure OAuth connection
-        </div>
-        <button>Verify ownership</button>
-      </div>
-    );
+  if (title === "Face Verification")
+    return <FaceVerification representative={role === "brand"} onSkip={onSkipFace} />;
+  if (title === "Social Media Accounts" || title === "Social Account Verification")
+    return <SocialConnect />;
   if (title === "Content Portfolio")
     return (
       <div className="upload-zone">
         <Icon name="camera" size={30} />
         <strong>Add your best work</strong>
-        <span>Upload photos, videos, or paste social links</span>
-        <button>
-          <Icon name="plus" size={15} /> Add portfolio item
-        </button>
+        <span>Paste a link to a post, reel, or video</span>
+        <input
+          value={fields[`${title}:LINK`] || ""}
+          placeholder="https://"
+          onChange={(event) => setField(`${title}:LINK`, event.target.value)}
+        />
       </div>
     );
   if (title === "AI Business Analysis" || title === "AI Creator Profile Analysis")
@@ -1411,34 +1327,43 @@ function OnboardingFields({
     title === "Pricing Preferences"
   )
     return (
-      <div className="range-card">
-        <div>
-          <span>{title === "Number of Creators" ? "2" : "₹10K"}</span>
-          <span>{title === "Number of Creators" ? "50+" : "₹5L+"}</span>
-        </div>
-        <div className="flow-range">
-          <i />
-          <i />
-        </div>
-        <strong>{title === "Number of Creators" ? "8–15 creators" : "₹50K – ₹1L"}</strong>
-        <small>Typical {title.toLowerCase()} per campaign</small>
+      <div className="field-stack">
+        <label>
+          {title === "Number of Creators" ? "HOW MANY CREATORS" : "STARTING AMOUNT"}
+          <input
+            value={fields[`${title}:AMOUNT`] || ""}
+            placeholder={title === "Number of Creators" ? "8" : "50000"}
+            onChange={(event) => setField(`${title}:AMOUNT`, event.target.value)}
+          />
+        </label>
       </div>
     );
-  if (title === "Availability") return <AvailabilityScheduler />;
   if (title === "Payment Information")
     return (
       <div className="field-stack">
         <label>
           ACCOUNT HOLDER
-          <input defaultValue="Aarohi Mehta" />
+          <input
+            value={fields[`${title}:ACCOUNT HOLDER`] || ""}
+            placeholder="Name on the account"
+            onChange={(event) => setField(`${title}:ACCOUNT HOLDER`, event.target.value)}
+          />
         </label>
         <label>
           UPI ID
-          <input defaultValue="aarohi@okaxis" />
+          <input
+            value={fields[`${title}:UPI ID`] || ""}
+            placeholder="name@upi"
+            onChange={(event) => setField(`${title}:UPI ID`, event.target.value)}
+          />
         </label>
         <label>
           PAN NUMBER
-          <input placeholder="ABCDE1234F" />
+          <input
+            value={fields[`${title}:PAN NUMBER`] || ""}
+            placeholder="ABCDE1234F"
+            onChange={(event) => setField(`${title}:PAN NUMBER`, event.target.value)}
+          />
         </label>
         <div className="secure-inline">
           <Icon name="shield" size={14} /> Encrypted and securely stored
@@ -1447,65 +1372,87 @@ function OnboardingFields({
     );
   if (title === "Target Locations" || title === "Location Details")
     return (
-      <AnimatedLocationMap creatorMode={role === "creator"} onSelect={toggle} selected={selected} />
+      <AnimatedLocationMap
+        creatorMode={role === "creator"}
+        selected={selected}
+        onSelect={(place) => {
+          setField(`${title}:LOCATION`, place);
+          if (!selected.includes(place)) toggle(place);
+        }}
+      />
     );
   if (title === "Audience Information" || title === "Target Audience")
     return (
       <AudienceInformation creatorMode={role === "creator"} selected={selected} toggle={toggle} />
     );
-  const fields: Record<string, [string, string][]> = {
+  if (title === "Content Performance")
+    return <ContentPerformance fields={fields} setField={setField} />;
+  if (title === "Availability") return <AvailabilityScheduler fields={fields} setField={setField} />;
+  const fieldHints: Record<string, [string, string][]> = {
     "Business Information": [
-      ["COMPANY NAME", "The Loom"],
-      ["BUSINESS TYPE", "D2C brand"],
+      ["COMPANY NAME", "Your company name"],
+      ["BUSINESS TYPE", "D2C, agency, store…"],
     ],
     "Business Details": [
-      ["WEBSITE", "theloom.in"],
-      ["INDUSTRY", "Fashion & apparel"],
-      ["HEADQUARTERS", "Mumbai, India"],
+      ["WEBSITE", "https://"],
+      ["INDUSTRY", "Fashion, food, tech…"],
+      ["HEADQUARTERS", "City, country"],
     ],
-    "About Your Business": [
-      [
-        "COMPANY DESCRIPTION",
-        "The Loom creates modern, responsibly made clothing for everyday India.",
-      ],
-    ],
+    "About Your Business": [["COMPANY DESCRIPTION", "What you make and who it is for"]],
     "Products & Services": [
-      ["PRIMARY PRODUCTS", "Contemporary clothing, accessories"],
-      ["UNIQUE SELLING POINT", "Responsibly made, modern Indian essentials"],
+      ["PRIMARY PRODUCTS", "What you sell"],
+      ["UNIQUE SELLING POINT", "Why a creator would choose you"],
     ],
     "Personal Information": [
-      ["LEGAL NAME", "Aarohi Mehta"],
-      ["CREATOR USERNAME", "@aarohi.edits"],
-      ["DISPLAY NAME", "Aarohi"],
+      ["LEGAL NAME", "Your legal name"],
+      ["CREATOR USERNAME", "@username"],
+      ["DISPLAY NAME", "Name your audience knows"],
     ],
     "Content Performance": [
-      ["AVERAGE REEL VIEWS", "182,000"],
-      ["ENGAGEMENT RATE", "5.8%"],
-      ["AVERAGE STORY VIEWS", "42,000"],
+      ["AVERAGE REEL VIEWS", "182000"],
+      ["ENGAGEMENT RATE", "5.8"],
+      ["AVERAGE STORY VIEWS", "42000"],
     ],
     "Previous Collaborations": [
-      ["BRANDS WORKED WITH", "Myntra, Nykaa, Plum"],
-      ["HIGHLIGHT", "Summer launch generated 1.2M views"],
+      ["BRANDS WORKED WITH", "Brands you have worked with"],
+      ["HIGHLIGHT", "A result you can stand behind"],
     ],
   };
-  const currentFields = fields[title] || [["ADD INFORMATION", "Type your answer here"]];
+  const currentFields = fieldHints[title] || [["ADD INFORMATION", "Type your answer here"]];
   return (
     <div className="field-stack">
-      {currentFields.map(([label, value]) => (
-        <label key={label}>
-          {label}
-          {title === "About Your Business" ? (
-            <textarea defaultValue={value} />
-          ) : (
-            <input defaultValue={value} />
-          )}
-        </label>
-      ))}
+      {currentFields.map(([label, hint]) => {
+        const key = `${title}:${label}`;
+        return (
+          <label key={label}>
+            {label}
+            {title === "About Your Business" ? (
+              <textarea
+                value={fields[key] || ""}
+                placeholder={hint}
+                onChange={(event) => setField(key, event.target.value)}
+              />
+            ) : (
+              <input
+                value={fields[key] || ""}
+                placeholder={hint}
+                onChange={(event) => setField(key, event.target.value)}
+              />
+            )}
+          </label>
+        );
+      })}
     </div>
   );
 }
 
-function AvailabilityScheduler() {
+function AvailabilityScheduler({
+  fields,
+  setField,
+}: {
+  fields: Record<string, string>;
+  setField: (key: string, value: string) => void;
+}) {
   const weekDays = [
     ["M", "Mon"],
     ["T", "Tue"],
@@ -1515,11 +1462,24 @@ function AvailabilityScheduler() {
     ["S", "Sat"],
     ["S", "Sun"],
   ];
-  const [workingDays, setWorkingDays] = useState([1, 2, 3, 4, 5]);
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("18:00");
-  const [leadTime, setLeadTime] = useState("3 days");
-  const [sameDay, setSameDay] = useState(false);
+  const savedSchedule = (() => {
+    try {
+      return fields["Availability:SCHEDULE"] ? JSON.parse(fields["Availability:SCHEDULE"]) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const [workingDays, setWorkingDays] = useState<number[]>(savedSchedule?.workingDays || [1, 2, 3, 4, 5]);
+  const [startTime, setStartTime] = useState(savedSchedule?.startTime || "09:00");
+  const [endTime, setEndTime] = useState(savedSchedule?.endTime || "18:00");
+  const [leadTime, setLeadTime] = useState(savedSchedule?.leadTime || "3 days");
+  const [sameDay, setSameDay] = useState(Boolean(savedSchedule?.sameDay));
+  useEffect(() => {
+    setField(
+      "Availability:SCHEDULE",
+      JSON.stringify({ workingDays, startTime, endTime, leadTime, sameDay }),
+    );
+  }, [workingDays, startTime, endTime, leadTime, sameDay]);
   const defaultDates = Array.from({ length: 30 }, (_, index) => index + 1).filter((date) => {
     const day = new Date(2025, 5, date).getDay();
     return day !== 0 && day !== 6;
@@ -1702,7 +1662,13 @@ function AvailabilityScheduler() {
   );
 }
 
-function FaceVerification({ representative }: { representative: boolean }) {
+function FaceVerification({
+  representative,
+  onSkip,
+}: {
+  representative: boolean;
+  onSkip: () => void;
+}) {
   const [stage, setStage] = useState<"intro" | "camera" | "processing" | "verified">("intro");
   const startProcessing = () => {
     setStage("processing");
@@ -1773,6 +1739,9 @@ function FaceVerification({ representative }: { representative: boolean }) {
         </div>
         <button className="face-action" onClick={() => setStage("camera")}>
           <Icon name="camera" size={17} /> Enable camera
+        </button>
+        <button className="face-back-action" type="button" onClick={onSkip}>
+          Skip for now
         </button>
         <small className="face-consent">
           By continuing, you consent to biometric processing for identity verification.
@@ -2106,6 +2075,57 @@ function SocialConnections({ creatorMode }: { creatorMode: boolean }) {
   );
 }
 
+function formatAudienceCount(value?: number) {
+  if (!value) return "0";
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(value);
+}
+
+function ContentPerformance({
+  fields,
+  setField,
+}: {
+  fields: Record<string, string>;
+  setField: (key: string, value: string) => void;
+}) {
+  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
+  useEffect(() => {
+    api
+      .me()
+      .then(({ user }) => {
+        const social = user.profile?.social;
+        if (social && typeof social === "object") setAccounts(Object.values(social) as SocialAccount[]);
+      })
+      .catch(() => {});
+  }, []);
+  return (
+    <div className="field-stack">
+      {accounts.length === 0 && (
+        <p className="flow-error" style={{ color: "inherit" }}>
+          Connect Instagram or YouTube on the earlier step. Views and the view rate are filled from that account.
+        </p>
+      )}
+      {accounts.map((account) => (
+        <p key={account.platform}>
+          <strong>{account.name}</strong> · {formatAudienceCount(account.followers)}{" "}
+          {account.platform === "youtube" ? "subscribers" : "followers"}
+          {account.views ? ` · ${formatAudienceCount(account.views)} avg views` : ""}
+          {account.viewRate ? ` · ${account.viewRate}% view rate` : ""}
+        </p>
+      ))}
+      <label>
+        NOTES FOR BRANDS
+        <input
+          value={fields["Content Performance:NOTES"] || ""}
+          placeholder="Anything the imported numbers do not show"
+          onChange={(event) => setField("Content Performance:NOTES", event.target.value)}
+        />
+      </label>
+    </div>
+  );
+}
+
 function AudienceInformation({
   creatorMode,
   selected,
@@ -2115,15 +2135,24 @@ function AudienceInformation({
   selected: string[];
   toggle: (value: string) => void;
 }) {
-  const [gender, setGender] = useState("Women");
-  const [age, setAge] = useState("18–24");
-  const ages = [
-    { label: "13–17", value: 9 },
-    { label: "18–24", value: 78 },
-    { label: "25–34", value: 54 },
-    { label: "35–44", value: 28 },
-    { label: "45+", value: 12 },
-  ];
+  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
+  const [location, setLocation] = useState("");
+  useEffect(() => {
+    api
+      .me()
+      .then(({ user }) => {
+        const social = user.profile?.social;
+        if (social && typeof social === "object") setAccounts(Object.values(social) as SocialAccount[]);
+        const savedFields = user.profile?.fields as Record<string, string> | undefined;
+        setLocation(savedFields?.["Location Details:LOCATION"] || "");
+      })
+      .catch(() => {});
+  }, []);
+  const followers = accounts.reduce((sum, account) => sum + (account.followers || 0), 0);
+  const viewRates = accounts.map((account) => account.viewRate || 0).filter(Boolean);
+  const viewRate = viewRates.length
+    ? Math.round((viewRates.reduce((sum, value) => sum + value, 0) / viewRates.length) * 10) / 10
+    : undefined;
 
   return (
     <div className="audience-builder">
@@ -2133,12 +2162,14 @@ function AudienceInformation({
             <Icon name="user" size={19} />
           </span>
           <p>
-            <small>{creatorMode ? "TOTAL AUDIENCE" : "ESTIMATED MARKET"}</small>
-            <strong>{creatorMode ? "248K" : "2.4M"}</strong>
+            <small>{creatorMode ? "TOTAL AUDIENCE" : "CONNECTED REACH"}</small>
+            <strong>{accounts.length ? formatAudienceCount(followers) : "—"}</strong>
           </p>
-          <b>
-            <Icon name="trending" size={12} /> 12.4%
-          </b>
+          {viewRate ? (
+            <b>
+              <Icon name="trending" size={12} /> {viewRate}%
+            </b>
+          ) : null}
         </div>
         <div className="audience-source">
           <span className="source-instagram">
@@ -2146,102 +2177,54 @@ function AudienceInformation({
           </span>
           <p>
             <strong>
-              {creatorMode ? "Instagram insights connected" : "India market intelligence"}
+              {accounts.length
+                ? accounts.map((account) => account.handle).join(" · ")
+                : "No account connected yet"}
             </strong>
-            <small>{creatorMode ? "Updated 2 hours ago" : "Estimated from your selections"}</small>
+            <small>
+              {accounts.length
+                ? "Imported from the accounts you approved"
+                : "Connect Instagram or YouTube to import followers"}
+            </small>
           </p>
-          <Icon name="check" size={14} />
+          {accounts.length > 0 && <Icon name="check" size={14} />}
         </div>
       </div>
 
-      <section className="demographic-card">
-        <header>
-          <div>
-            <span>AGE DISTRIBUTION</span>
-            <strong>{creatorMode ? "Your audience" : "Target age groups"}</strong>
-          </div>
-          <button>View details</button>
-        </header>
-        <div className="age-chart">
-          {ages.map((item, index) => (
-            <button
-              className={age === item.label ? "active" : ""}
-              onClick={() => setAge(item.label)}
-              key={item.label}
-            >
-              <span className="age-value">{age === item.label ? `${item.value}%` : ""}</span>
-              <i>
-                <b
-                  className={`age-bar age-bar-${index}`}
-                  style={{ height: `${Math.max(item.value, 18)}%` }}
-                />
-              </i>
-              <small>{item.label}</small>
-            </button>
-          ))}
-        </div>
-        <p className="chart-insight">
-          <Icon name="sparkles" size={14} />
-          <span>
-            <strong>Strongest segment</strong> · {age} accounts for the highest engagement.
-          </span>
-        </p>
-      </section>
-
-      <section className="gender-card">
-        <div className="gender-donut">
-          <svg viewBox="0 0 44 44">
-            <circle className="donut-track" cx="22" cy="22" r="17" />
-            <circle className="donut-women" cx="22" cy="22" r="17" />
-            <circle className="donut-men" cx="22" cy="22" r="17" />
-          </svg>
-          <span>
-            <strong>68%</strong>
-            <small>Women</small>
-          </span>
-        </div>
-        <div className="gender-copy">
-          <span>PRIMARY GENDER</span>
-          <strong>{gender}</strong>
-          <div>
-            {["Women", "Men", "All"].map((item) => (
-              <button
-                className={gender === item ? "active" : ""}
-                onClick={() => setGender(item)}
-                key={item}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
+      {accounts.map((account) => (
+        <section className="demographic-card" key={account.platform}>
+          <header>
+            <div>
+              <span>{account.platform.toUpperCase()}</span>
+              <strong>{account.name}</strong>
+            </div>
+          </header>
+          <p className="chart-insight">
+            <Icon name="sparkles" size={14} />
+            <span>
+              {formatAudienceCount(account.followers)} {account.platform === "youtube" ? "subscribers" : "followers"}
+              {account.following ? ` · ${formatAudienceCount(account.following)} following` : ""}
+              {account.posts ? ` · ${account.posts} posts` : ""}
+              {account.viewRate ? ` · ${account.viewRate}% view rate` : ""}
+            </span>
+          </p>
+        </section>
+      ))}
 
       <section className="audience-locations">
         <header>
-          <span>TOP LOCATIONS</span>
-          <button>
-            <Icon name="plus" size={14} /> Add
-          </button>
+          <span>YOUR LOCATION</span>
         </header>
         <div>
-          {[
-            ["Mumbai", "34%", "#dfff4f"],
-            ["Delhi NCR", "22%", "#b9a8ff"],
-            ["Bengaluru", "16%", "#ffbe7b"],
-          ].map(([city, value, color]) => (
-            <button key={city}>
-              <i style={{ background: color }}>
-                <Icon name="pin" size={13} />
-              </i>
-              <span>
-                <strong>{city}</strong>
-                <small>India</small>
-              </span>
-              <b>{value}</b>
-              <Icon name="chevron" size={13} />
-            </button>
-          ))}
+          <button type="button">
+            <i style={{ background: "#dfff4f" }}>
+              <Icon name="pin" size={13} />
+            </i>
+            <span>
+              <strong>{location || "Location not added"}</strong>
+              <small>{location ? "Saved from location details" : "Add it on the location step"}</small>
+            </span>
+          </button>
         </div>
       </section>
 
@@ -2297,13 +2280,78 @@ function AnimatedLocationMap({
     },
   ];
   const [activeCity, setActiveCity] = useState(cities[0]);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<PlaceResult[]>([]);
+  const [chosen, setChosen] = useState(selected[selected.length - 1] || "");
+  const [locating, setLocating] = useState(false);
   const chooseCity = (city: (typeof cities)[0]) => {
     setActiveCity(city);
-    onSelect(city.name);
+    setChosen(`${city.name}, ${city.state}`);
+    onSelect(`${city.name}, ${city.state}`);
+  };
+  useEffect(() => {
+    const text = query.trim();
+    if (text.length < 2) {
+      setResults([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      api
+        .searchPlaces(text)
+        .then((data) => setResults(data.places))
+        .catch(() => setResults([]));
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  const useMyLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        api
+          .reversePlace(position.coords.latitude, position.coords.longitude)
+          .then(({ place }) => {
+            setChosen(place.label);
+            onSelect(place.label);
+            setQuery("");
+            setResults([]);
+          })
+          .finally(() => setLocating(false));
+      },
+      () => setLocating(false),
+    );
   };
 
   return (
     <div className="animated-location">
+      <label className="map-field-label">SEARCH ANY PLACE</label>
+      <div className="location-search">
+        <Icon name="search" size={16} />
+        <input
+          value={query}
+          placeholder="City, neighbourhood, or address"
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
+      {results.length > 0 && (
+        <div className="place-results">
+          {results.map((place) => (
+            <button
+              key={place.id}
+              type="button"
+              onClick={() => {
+                setChosen(place.label);
+                onSelect(place.label);
+                setQuery(place.city || place.label);
+                setResults([]);
+              }}
+            >
+              <strong>{place.city || place.label.split(",")[0]}</strong>
+              <small>{place.label}</small>
+            </button>
+          ))}
+        </div>
+      )}
       <label className="map-field-label">COUNTRY</label>
       <button className="map-country">
         <span className="india-flag">IN</span>
@@ -2338,7 +2386,7 @@ function AnimatedLocationMap({
         <div className="map-live-badge">
           <i /> LIVE CREATOR MAP
         </div>
-        <button className="map-locate" aria-label="Use current location">
+        <button className="map-locate" type="button" aria-label="Use current location" onClick={useMyLocation}>
           <Icon name="pin" size={17} />
         </button>
 
@@ -2382,10 +2430,8 @@ function AnimatedLocationMap({
             <strong>+{activeCity.count}</strong>
           </div>
           <p>
-            <strong>
-              {creatorMode ? "340 brands can find you" : `${activeCity.count} creators nearby`}
-            </strong>
-            <small>{activeCity.name} · Updated live</small>
+            <strong>{chosen || `${activeCity.name}, ${activeCity.state}`}</strong>
+            <small>{locating ? "Finding you…" : creatorMode ? "Brands can discover you here" : "Campaigns can target this place"}</small>
           </p>
           <Icon name="sparkles" size={17} />
         </div>
@@ -2397,9 +2443,7 @@ function AnimatedLocationMap({
         </span>
         <p>
           <small>SELECTED LOCATION</small>
-          <strong>
-            {activeCity.name}, {activeCity.state}
-          </strong>
+          <strong>{chosen || `${activeCity.name}, ${activeCity.state}`}</strong>
         </p>
         <b>
           <Icon name="check" size={13} />

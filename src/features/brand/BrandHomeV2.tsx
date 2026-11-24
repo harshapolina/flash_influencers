@@ -1,10 +1,39 @@
-import { useState } from "react";
-import { creators } from "../../data";
+import { useEffect, useState } from "react";
+import { api } from "../../lib/api";
 import { Icon } from "../../lib/icons";
-import type { Creator, IconName } from "../../types";
+import type { Booking, BrandCampaign, Creator, IconName, InboxMessage } from "../../types";
 import { StatusBar } from "../../components/ui/StatusBar";
 import { SectionTitle } from "../../components/ui/SectionTitle";
 import { useAppStore } from "../../store/AppStore";
+
+function inrCompact(n: number) {
+  if (n >= 100000) return `₹${(n / 100000).toFixed(1).replace(/\.0$/, "")}L`;
+  if (n >= 1000) return `₹${Math.round(n / 1000)}K`;
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+function parseCount(value: string) {
+  const n = Number(String(value).replace(/[^\d.]/g, ""));
+  if (!n) return 0;
+  if (/m/i.test(value)) return n * 1_000_000;
+  if (/k/i.test(value)) return n * 1_000;
+  return n;
+}
+
+function compactCount(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(Math.round(n));
+}
+
+function initials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+}
 
 export function BrandHomeV2({
   onExplore,
@@ -13,10 +42,47 @@ export function BrandHomeV2({
   onExplore: () => void;
   onCreator: (creator: Creator) => void;
 }) {
-  const { state, toggleLike } = useAppStore();
+  const { state, toggleLike, refreshCreators } = useAppStore();
   const [prompt, setPrompt] = useState("");
+  const [campaigns, setCampaigns] = useState<BrandCampaign[]>([]);
+  const [counts, setCounts] = useState({ active: 0, applications: 0, completed: 0 });
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [messages, setMessages] = useState<InboxMessage[]>([]);
   const saved = state.likedIds;
   const toggleSave = toggleLike;
+  const creators = state.creatorsCache;
+  const userName = state.user?.name || "there";
+  const firstName = userName.split(" ")[0];
+  const workspace =
+    (typeof state.user?.profile.company === "string" && state.user.profile.company) ||
+    (typeof state.user?.profile.brandName === "string" && state.user.profile.brandName) ||
+    userName;
+  const featured = campaigns.find((c) => c.status === "active") || campaigns[0];
+  const spend = bookings.reduce((sum, booking) => sum + (booking.price || 0), 0);
+  const pending = bookings.filter((booking) => booking.status === "pending").length;
+  const reach = creators.reduce((sum, creator) => sum + parseCount(creator.views), 0);
+  const engagement = creators.reduce((sum, creator) => sum + parseCount(creator.engagement), 0);
+  const recommended = [...creators].sort((a, b) => b.match - a.match).slice(0, 3);
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  useEffect(() => {
+    void refreshCreators("");
+    api
+      .listCampaigns({})
+      .then((data) => {
+        setCampaigns(data.campaigns || []);
+        setBookings(data.bookings || []);
+        if (data.counts) setCounts(data.counts);
+      })
+      .catch(() => {});
+    api
+      .listMessages("all")
+      .then((data) => setMessages(data.messages))
+      .catch(() => {});
+    // Load once when the workspace opens. refreshCreators changes whenever the cache updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="screen brand-v2">
@@ -26,14 +92,14 @@ export function BrandHomeV2({
         <div className="bv2-location">
           <small>WORKSPACE</small>
           <strong>
-            The Loom <Icon name="chevron" size={13} />
+            {workspace} <Icon name="chevron" size={13} />
           </strong>
         </div>
         <button className="bv2-icon-button">
           <Icon name="bell" size={18} />
           <i />
         </button>
-        <button className="bv2-avatar">NK</button>
+        <button className="bv2-avatar">{initials(userName) || "OR"}</button>
       </header>
 
       <div className="bv2-search">
@@ -45,63 +111,65 @@ export function BrandHomeV2({
       </div>
 
       <section className="bv2-greeting">
-        <span>Good morning, Neha</span>
+        <span>
+          {greeting}, {firstName}
+        </span>
         <h1>
           Grow your brand
           <br />
           with the right <em>voices.</em>
         </h1>
-        <p>Three items need your attention today.</p>
+        <p>
+          {counts.applications + pending
+            ? `${counts.applications + pending} items need your attention today.`
+            : "Your workspace is up to date."}
+        </p>
       </section>
 
       <div className="bv2-chips">
         <button className="active">Overview</button>
         <button>
-          Approvals <b>3</b>
+          Approvals <b>{pending}</b>
         </button>
         <button>
-          Applications <b>8</b>
+          Applications <b>{counts.applications}</b>
         </button>
         <button>Reports</button>
       </div>
 
       <section className="bv2-featured">
         <img
-          src="https://images.unsplash.com/photo-1723218624898-2089a034fd36?crop=faces&fit=crop&w=850&h=600&q=88"
-          alt="Summer Edit fashion campaign"
+          src={recommended[0]?.image || creators[0]?.image || ""}
+          alt={featured?.title || "Campaign"}
         />
         <div className="bv2-featured-shade" />
         <span className="bv2-live">
-          <i /> ACTIVE CAMPAIGN
+          <i /> {(featured?.status || "active").toUpperCase()} CAMPAIGN
         </span>
         <button className="bv2-save">
           <Icon name="bookmark" size={17} />
         </button>
         <div className="bv2-featured-copy">
-          <small>SUMMER EDIT 2025</small>
-          <h2>
-            Colour made
-            <br />
-            for every day.
-          </h2>
+          <small>{featured?.brand || workspace}</small>
+          <h2>{featured?.title || "No live campaign yet"}</h2>
           <div>
             <span>
-              <Icon name="user" size={13} /> 8 creators
+              <Icon name="user" size={13} /> {featured?.creatorsConfirmed || `${creators.length} creators`}
             </span>
             <span>
-              <Icon name="calendar" size={13} /> Due 28 Jun
+              <Icon name="calendar" size={13} /> Due {featured?.due || "—"}
             </span>
           </div>
         </div>
         <div className="bv2-campaign-progress">
           <div>
             <span>Campaign progress</span>
-            <strong>72%</strong>
+            <strong>{featured?.progress ?? 0}%</strong>
           </div>
           <i>
-            <b />
+            <b style={{ width: `${featured?.progress ?? 0}%` }} />
           </i>
-          <button>
+          <button onClick={onExplore}>
             Manage campaign <Icon name="arrow" size={14} />
           </button>
         </div>
@@ -109,10 +177,10 @@ export function BrandHomeV2({
 
       <div className="bv2-stat-scroll">
         {[
-          ["12", "Active campaigns", "briefcase"],
-          ["38", "Creators", "user"],
-          ["₹4.2L", "Total spend", "wallet"],
-          ["3", "Pending approval", "clock"],
+          [String(counts.active), "Active campaigns", "briefcase"],
+          [String(creators.length), "Creators", "user"],
+          [inrCompact(spend), "Total spend", "wallet"],
+          [String(pending), "Pending approval", "clock"],
         ].map(([value, label, icon], index) => (
           <button className={index === 3 ? "attention" : ""} key={label}>
             <span>
@@ -147,7 +215,7 @@ export function BrandHomeV2({
 
       <SectionTitle title="Recommended creators" action="See all" onClick={onExplore} />
       <div className="bv2-creators">
-        {creators.slice(0, 3).map((creator) => (
+        {recommended.map((creator) => (
           <article key={creator.id}>
             <div className="bv2-creator-image" onClick={() => onCreator(creator)}>
               <img src={creator.image} alt={creator.name} />
@@ -198,11 +266,17 @@ export function BrandHomeV2({
 
       <SectionTitle title="Needs your attention" action="See all" onClick={() => {}} />
       <div className="bv2-list">
-        {[
-          ["camera", "Review 3 submissions", "Summer Edit · received today", "Review", "lavender"],
-          ["user", "8 creator applications", "Monsoon Stories · closes Friday", "View", "green"],
-          ["wallet", "Payment due tomorrow", "Everyday Active · ₹42,000", "Pay", "orange"],
-        ].map(([icon, title, detail, action, tone]) => (
+        {(
+          campaigns.filter((c) => c.needsAttention).length
+            ? campaigns
+                .filter((c) => c.needsAttention)
+                .slice(0, 3)
+                .map((c) => ["briefcase", c.needsAttention || c.title, `${c.title} · due ${c.due}`, "View", "lavender"] as const)
+            : bookings.slice(0, 3).map(
+                (b) =>
+                  ["wallet", b.deliverable, `${b.date} · ${inrCompact(b.price)}`, b.status, "orange"] as const,
+              )
+        ).map(([icon, title, detail, action, tone]) => (
           <button key={title}>
             <span className={tone}>
               <Icon name={icon as IconName} size={17} />
@@ -220,8 +294,8 @@ export function BrandHomeV2({
       <section className="bv2-performance">
         <header>
           <div>
-            <small>TOTAL REACH</small>
-            <strong>8.42M</strong>
+            <small>MATCHED CREATOR REACH</small>
+            <strong>{compactCount(reach)}</strong>
           </div>
           <span>
             <Icon name="trending" size={13} /> 18.6%
@@ -250,10 +324,10 @@ export function BrandHomeV2({
         </div>
         <div className="bv2-performance-grid">
           {[
-            ["6.8M", "Views"],
-            ["412K", "Engagement"],
-            ["28.4K", "Clicks"],
-            ["1,842", "Conversions"],
+            [compactCount(reach), "Views"],
+            [`${engagement.toFixed(1)}%`, "Engagement"],
+            [String(creators.length), "Creators"],
+            [String(counts.active), "Campaigns"],
           ].map(([value, label]) => (
             <div key={label}>
               <strong>{value}</strong>
@@ -263,9 +337,9 @@ export function BrandHomeV2({
         </div>
       </section>
 
-      <SectionTitle title="Creator applications" action="8 new" onClick={() => {}} />
+      <SectionTitle title="Creator applications" action={`${counts.applications} open`} onClick={onExplore} />
       <div className="bv2-applications">
-        {creators.slice(0, 2).map((creator, index) => (
+        {recommended.slice(0, 2).map((creator, index) => (
           <article key={creator.id}>
             <img src={creator.image} alt={creator.name} />
             <div>
@@ -274,7 +348,7 @@ export function BrandHomeV2({
               <small>
                 {creator.niche} · {creator.followers}
               </small>
-              <p>Summer Edit 2025</p>
+              <p>{featured?.title || "Open campaign"}</p>
             </div>
             <aside>
               <strong>{creator.price}</strong>
@@ -286,14 +360,21 @@ export function BrandHomeV2({
 
       <SectionTitle title="Collaborating creators" action="View all" onClick={() => {}} />
       <div className="bv2-collaborators">
-        {creators.map((creator, index) => (
+        {(bookings.length
+          ? bookings
+              .map((booking) => creators.find((creator) => creator.id === booking.creatorId))
+              .filter((creator): creator is Creator => Boolean(creator))
+          : recommended
+        )
+          .slice(0, 4)
+          .map((creator, index) => (
           <button key={creator.id} onClick={() => onCreator(creator)}>
             <div>
               <img src={creator.image} alt={creator.name} />
-              <i className={index === 2 ? "away" : ""} />
+              <i className={creator.available ? "" : "away"} />
             </div>
             <strong>{creator.name.split(" ")[0]}</strong>
-            <small>{["Submitted", "Creating", "Awaiting", "Approved"][index]}</small>
+            <small>{bookings[index]?.status || (creator.available ? "Available" : "Busy")}</small>
           </button>
         ))}
       </div>
@@ -308,8 +389,15 @@ export function BrandHomeV2({
             <strong>A regional opportunity</strong>
           </div>
         </header>
-        <h3>Telugu lifestyle creators are outperforming your category by 1.8×.</h3>
-        <p>Based on audience overlap and 42 recent fashion campaigns.</p>
+        <h3>
+          {recommended[0]
+            ? `${recommended[0].name} in ${recommended[0].city} is your strongest match at ${recommended[0].match}%.`
+            : "Add a campaign to see creator matches from your workspace."}
+        </h3>
+        <p>
+          Based on {creators.length} live creator profiles
+          {featured ? ` and ${featured.title}.` : "."}
+        </p>
         <div>
           <button>Explore creators</button>
           <button>
@@ -320,11 +408,13 @@ export function BrandHomeV2({
 
       <SectionTitle title="Recent activity" action="All activity" onClick={() => {}} />
       <div className="bv2-activity">
-        {[
-          ["check", "Aarohi accepted your invitation", "Summer Edit 2025", "12m"],
-          ["camera", "Rhea submitted a final reel", "Monsoon Stories", "1h"],
-          ["wallet", "Payment processed", "Everyday Active · ₹18K", "1d"],
-        ].map(([icon, title, detail, time], index) => (
+        {(messages.length
+          ? messages.slice(0, 3).map((msg) => ["message", msg.preview, msg.campaign, msg.time] as const)
+          : bookings.slice(0, 3).map(
+              (booking) =>
+                ["wallet", booking.deliverable, booking.date, booking.status] as const,
+            )
+        ).map(([icon, title, detail, time], index) => (
           <button key={title}>
             <span className={`tone-${index}`}>
               <Icon name={icon as IconName} size={15} />
@@ -350,7 +440,11 @@ export function BrandHomeV2({
           </div>
         </div>
         <div className="bv2-prompts">
-          {["Find Telugu creators", "Plan a ₹50K launch", "Analyze Summer Edit"].map((item) => (
+          {[
+            recommended[0] ? `Find creators like ${recommended[0].name.split(" ")[0]}` : "Find creators",
+            featured ? `Review ${featured.title}` : "Plan a campaign",
+            `Spend so far ${inrCompact(spend)}`,
+          ].map((item) => (
             <button key={item} onClick={() => setPrompt(item)}>
               {item}
             </button>

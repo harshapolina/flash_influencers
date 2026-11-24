@@ -31,9 +31,13 @@ export function CreatorEarningsScreen() {
     }
   };
 
-  const available = data?.available ?? 84320;
+  const available = data?.available ?? 0;
   const withdrawn = Boolean(data?.withdrawn);
-  const txs = data?.transactions ?? [];
+  const txs = (data?.transactions ?? []).filter((tx: { createdAt?: string }) => {
+    if (period === "All time") return true;
+    if (!tx.createdAt) return false;
+    return new Date(tx.createdAt).getFullYear() === Number(period);
+  });
   const chart = data?.chart ?? [35, 48, 41, 67, 58, 92];
 
   return (
@@ -59,7 +63,7 @@ export function CreatorEarningsScreen() {
         <span>AVAILABLE TO WITHDRAW</span>
         <strong>₹{Number(available).toLocaleString("en-IN")}</strong>
         <p>
-          <b>₹{(data?.earnedThisMonth ?? 21400).toLocaleString("en-IN")}</b> earned in June · {period}
+          <b>₹{(data?.earnedThisMonth ?? 0).toLocaleString("en-IN")}</b> earned this month · {period}
         </p>
         <button type="button" onClick={withdraw} disabled={busy || withdrawn || available <= 0}>
           {withdrawn ? "Withdrawal requested" : busy ? "Processing…" : "Withdraw now"}{" "}
@@ -74,7 +78,7 @@ export function CreatorEarningsScreen() {
             <Icon name="clock" size={15} />
           </span>
           <p>
-            <strong>₹{(data?.pending ?? 18000).toLocaleString("en-IN")}</strong>
+            <strong>₹{(data?.pending ?? 0).toLocaleString("en-IN")}</strong>
             <small>Pending</small>
           </p>
         </div>
@@ -83,7 +87,7 @@ export function CreatorEarningsScreen() {
             <Icon name="check" size={15} />
           </span>
           <p>
-            <strong>₹1.42L</strong>
+            <strong>₹{(data?.paidToDate ?? 0).toLocaleString("en-IN")}</strong>
             <small>Paid to date</small>
           </p>
         </div>
@@ -92,7 +96,7 @@ export function CreatorEarningsScreen() {
         <header>
           <div>
             <span>6 MONTH EARNINGS</span>
-            <strong>{period === "2024" ? "₹1.76L" : "₹2.14L"}</strong>
+            <strong>₹{(data?.sixMonthTotal ?? 0).toLocaleString("en-IN")}</strong>
           </div>
           <button
             type="button"
@@ -108,7 +112,9 @@ export function CreatorEarningsScreen() {
           {chart.map((h: number, i: number) => (
             <div key={i}>
               <span className={i === 5 ? "active" : ""} style={{ height: `${h}%` }}>
-                {i === 5 && <b>₹48K</b>}
+                {i === chart.length - 1 && Number(data?.earnedThisMonth) > 0 && (
+                  <b>₹{Number(data.earnedThisMonth).toLocaleString("en-IN")}</b>
+                )}
               </span>
               <small>{["Jan", "Feb", "Mar", "Apr", "May", "Jun"][i]}</small>
             </div>
@@ -117,7 +123,9 @@ export function CreatorEarningsScreen() {
       </section>
       <div className="earnings-title">
         <strong>Recent transactions</strong>
-        <button type="button">View all</button>
+        <button type="button" onClick={() => setPeriod("All time")}>
+          View all
+        </button>
       </div>
       <div className="transaction-list">
         {txs.map((tx: any, i: number) => (
@@ -130,7 +138,10 @@ export function CreatorEarningsScreen() {
             </span>
             <p>
               <strong>{tx.name}</strong>
-              <small>{tx.desc} · 18 Jun</small>
+              <small>
+                {tx.desc}
+                {tx.createdAt ? ` · ${new Date(tx.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}
+              </small>
             </p>
             <div>
               <strong>{tx.amount}</strong>

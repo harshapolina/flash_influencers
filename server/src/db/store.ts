@@ -35,6 +35,10 @@ export const store = {
     return lean<User | null>(await UserModel.findOne({ email }).lean());
   },
 
+  async findUserByGoogleId(googleId: string) {
+    return lean<User | null>(await UserModel.findOne({ googleId }).lean());
+  },
+
   async findUserById(id: string) {
     return lean<User | null>(await UserModel.findOne({ id }).lean());
   },
@@ -122,9 +126,7 @@ export const store = {
   },
 
   async listWorkItems(creatorUserId: string) {
-    return (
-      await WorkItemModel.find({ creatorUserId: { $in: [creatorUserId, "system"] } }).lean()
-    ).map((w) => lean<WorkItem>(w));
+    return (await WorkItemModel.find({ creatorUserId }).lean()).map((w) => lean<WorkItem>(w));
   },
 
   async createWorkItem(item: WorkItem) {
@@ -142,7 +144,7 @@ export const store = {
 
   async listTransactions(creatorUserId: string) {
     return (
-      await TransactionModel.find({ creatorUserId: { $in: [creatorUserId, "system"] } })
+      await TransactionModel.find({ creatorUserId })
         .sort({ createdAt: -1 })
         .lean()
     ).map((t) => lean<Transaction>(t));

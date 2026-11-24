@@ -1,6 +1,6 @@
-import { creators } from "../../data";
 import { Icon } from "../../lib/icons";
 import type { Creator } from "../../types";
+import { useAppStore } from "../../store/AppStore";
 import { StatusBar } from "../ui/StatusBar";
 
 export function CreatorDetail({
@@ -16,6 +16,8 @@ export function CreatorDetail({
   onClose: () => void;
   onBook: () => void;
 }) {
+  const { state } = useAppStore();
+  const similar = state.creatorsCache.filter((item) => item.id !== creator.id).slice(0, 3);
   return (
     <div className="detail-layer">
       <div className="detail-screen">
@@ -86,9 +88,9 @@ export function CreatorDetail({
           <div className="ai-note">
             <Icon name="sparkles" />
             <p>
-              Strong audience overlap with urban women 18–34 and <strong>2.1× higher</strong>{" "}
-              engagement than your category average.
-              <small>AI insight · Results are estimates</small>
+              {creator.niche} creator in {creator.city} with{" "}
+              <strong>{creator.engagement} engagement</strong> and {creator.followers} followers.
+              <small>From the live creator profile</small>
             </p>
           </div>
           <div className="detail-title">
@@ -96,10 +98,7 @@ export function CreatorDetail({
             <button type="button">View all</button>
           </div>
           <div className="work-grid">
-            {creators
-              .filter((c) => c.id !== creator.id)
-              .slice(0, 3)
-              .map((c) => (
+            {similar.map((c) => (
                 <img key={c.id} src={c.image} alt="Portfolio sample" />
               ))}
           </div>

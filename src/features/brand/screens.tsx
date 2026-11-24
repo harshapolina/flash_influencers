@@ -13,17 +13,27 @@ export function ProfileScreen() {
           <Icon name="bell" />
         </button>
         <div className="profile-photo">
-          <span>NK</span>
+          <span>
+            {(state.user?.name || "OR")
+              .split(" ")
+              .slice(0, 2)
+              .map((part) => part[0]?.toUpperCase() || "")
+              .join("")}
+          </span>
         </div>
-        <h1>Neha Kapoor</h1>
-        <p>The Loom · Brand account</p>
+        <h1>{state.user?.name || "Brand"}</h1>
+        <p>
+          {(typeof state.user?.profile.company === "string" && state.user.profile.company) ||
+            state.user?.email ||
+            "Brand account"}
+        </p>
         <span className="verified-account">
           <Icon name="shield" size={14} /> Business verified
         </span>
       </header>
       <div className="profile-numbers">
         <div>
-          <strong>{12 + state.bookings.length}</strong>
+          <strong>{state.bookings.length}</strong>
           <span>Campaigns</span>
         </div>
         <div>
@@ -57,7 +67,7 @@ export function ProfileScreen() {
           <span>
             <Icon name="close" />
           </span>
-          <strong>Sign out / reset demo</strong>
+          <strong>Sign out</strong>
           <Icon name="chevron" size={16} />
         </button>
       </div>

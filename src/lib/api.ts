@@ -1,16 +1,17 @@
 import { Capacitor } from "@capacitor/core";
 
-const API_BASE =
-  import.meta.env.VITE_API_URL ||
-  (Capacitor.isNativePlatform() ? "http://localhost:3001/api" : "/api");
-const TOKEN_KEY = "orbitly.token";
-const LOCAL_TOKEN = "local-demo";
-
-export function isLocalDemoToken(token: string | null = getToken()) {
-  return Boolean(token && token.startsWith("local-"));
+function resolveApiBase() {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (Capacitor.isNativePlatform()) {
+    // USB: adb reverse tcp:3001 tcp:3001
+    // Wi-Fi: set VITE_API_URL=http://YOUR_LAN_IP:3001/api
+    return "http://localhost:3001/api";
+  }
+  return "/api";
 }
 
-export { LOCAL_TOKEN };
+const API_BASE = resolveApiBase();
+const TOKEN_KEY = "orbitly.token";
 
 export type ApiUser = {
   id: string;
@@ -22,6 +23,8 @@ export type ApiUser = {
   onboardingStep: number;
   onboardingPhase: "common" | "role";
   profile: Record<string, unknown>;
+  avatarUrl?: string;
+  authProvider?: string;
 };
 
 export function getToken() {
@@ -39,7 +42,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch {
+    throw new Error(
+      "Cannot reach Orbitly API. Start the server (`npm --prefix server run dev`) and keep this device connected.",
+    );
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data as T;
@@ -52,21 +62,33 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  login: (body: { email: string; password: string }) =>
+  login: (body: { email: string; password: string; role?: "brand" | "creator" }) =>
     request<{ token: string; user: ApiUser }>("/auth/login", {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  googleLogin: (body: { idToken: string; role?: "brand" | "creator" }) =>
+    request<{ token?: string; user?: ApiUser; needsRole?: boolean; email?: string; name?: string }>(
+      "/auth/google",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   demoLogin: (role: "brand" | "creator") =>
     request<{ token: string; user: ApiUser }>("/auth/demo-login", {
       method: "POST",
       body: JSON.stringify({ role }),
     }),
-  sendOtp: (email: string) =>
-    request<{ ok: boolean; expiresInSec: number; devCode?: string; message: string }>(
-      "/auth/otp/send",
-      { method: "POST", body: JSON.stringify({ email, purpose: "verify" }) },
-    ),
+  sendOtp: (email: string, purpose: "verify" | "login" = "verify") =>
+    request<{
+      ok: boolean;
+      expiresInSec: number;
+      message: string;
+      delivered?: boolean;
+      previewUrl?: string;
+      devCode?: string;
+    }>("/auth/otp/send", {
+      method: "POST",
+      body: JSON.stringify({ email, purpose }),
+    }),
   verifyOtp: (email: string, code: string) =>
     request<{ verified: boolean; token?: string; user?: ApiUser }>("/auth/otp/verify", {
       method: "POST",
@@ -131,6 +153,45 @@ export const api = {
     request<{ messages: import("../types").InboxMessage[]; unreadCount: number }>(
       `/messages?tab=${tab}`,
     ),
+  markMessageRead: (id: string) =>
+    request<{ ok: boolean }>(`/messages/${id}/read`, { method: "POST" }),
   earnings: () => request<any>("/earnings"),
   withdraw: () => request<{ ok: boolean; available: number }>("/earnings/withdraw", { method: "POST" }),
+  searchPlaces: (q: string) =>
+    request<{ places: PlaceResult[] }>(`/places?q=${encodeURIComponent(q)}`),
+  reversePlace: (lat: number, lon: number) =>
+    request<{ place: PlaceResult }>(`/places/reverse?lat=${lat}&lon=${lon}`),
+  instagramAuthUrl: () => request<{ url: string }>("/social/instagram/start"),
+  connectSocial: (body: { platform: "instagram" | "youtube"; handle: string }) =>
+    request<{ account: SocialAccount; user: ApiUser }>("/social/connect", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  disconnectSocial: (platform: "instagram" | "youtube") =>
+    request<{ user: ApiUser }>(`/social/${platform}`, { method: "DELETE" }),
+};
+
+export type PlaceResult = {
+  id: number;
+  label: string;
+  city: string;
+  region: string;
+  country: string;
+  lat: number;
+  lon: number;
+};
+
+export type SocialAccount = {
+  platform: "instagram" | "youtube";
+  handle: string;
+  name: string;
+  avatar?: string;
+  url: string;
+  followers?: number;
+  following?: number;
+  posts?: number;
+  views?: number;
+  viewRate?: number;
+  topPosts: { title: string; url: string; thumbnail?: string; views?: number }[];
+  connectedAt: string;
 };

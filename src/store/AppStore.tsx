@@ -5,43 +5,10 @@ import {
   useEffect,
   useMemo,
   useState,
-  type Dispatch,
   type ReactNode,
-  type SetStateAction,
 } from "react";
-import { creators as seedCreators } from "../data";
-import { api, getToken, isLocalDemoToken, LOCAL_TOKEN, setToken, type ApiUser } from "../lib/api";
+import { api, getToken, setToken, type ApiUser } from "../lib/api";
 import type { Booking, Creator, ExploreFilters, OnboardingRole } from "../types";
-
-function localUser(role: OnboardingRole): ApiUser {
-  return {
-    id: `local-${role}`,
-    name: role === "brand" ? "Neha Kapoor" : "Aarohi Mehta",
-    email: role === "brand" ? "neha@theloom.in" : "aarohi@orbitly.app",
-    role,
-    emailVerified: true,
-    onboardingDone: true,
-    onboardingStep: 0,
-    onboardingPhase: "role",
-    profile: {},
-  };
-}
-
-function enterLocally(
-  setState: Dispatch<SetStateAction<AppState>>,
-  role: OnboardingRole,
-) {
-  setToken(LOCAL_TOKEN);
-  setState((s) => ({
-    ...s,
-    bootstrapping: false,
-    user: localUser(role),
-    onboardingDone: true,
-    role,
-    creatorsCache: s.creatorsCache.length ? s.creatorsCache : seedCreators,
-    apiOnline: false,
-  }));
-}
 
 const defaultFilters: ExploreFilters = {
   category: "all",
@@ -71,9 +38,10 @@ type AppState = {
 
 type AppStoreValue = {
   state: AppState;
-  completeOnboarding: (role: OnboardingRole) => Promise<void>;
+  completeOnboarding: (role: OnboardingRole, profile?: Record<string, unknown>) => Promise<void>;
   demoEnter: (role: OnboardingRole) => Promise<void>;
-  login: (email: string, password: string, preferredRole?: OnboardingRole) => Promise<void>;
+  login: (email: string, password: string, role?: OnboardingRole) => Promise<ApiUser>;
+  googleLogin: (idToken: string, role?: OnboardingRole) => Promise<ApiUser | { needsRole: true; email: string; name: string }>;
   resetSession: () => void;
   setUser: (user: ApiUser | null, token?: string | null) => void;
   toggleLike: (id: number) => Promise<void>;
@@ -160,17 +128,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setState((s) => ({ ...s, bootstrapping: false, user: null, onboardingDone: false }));
       return;
     }
-    if (isLocalDemoToken(token)) {
-      setState((s) => ({
-        ...s,
-        bootstrapping: false,
-        onboardingDone: true,
-        user: s.user ?? localUser(s.role),
-        creatorsCache: s.creatorsCache.length ? s.creatorsCache : seedCreators,
-        apiOnline: false,
-      }));
-      return;
-    }
     try {
       const { user } = await api.me();
       setState((s) => ({
@@ -226,53 +183,40 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setUser,
       refreshSession,
       refreshCreators,
-      completeOnboarding: async (role) => {
-        try {
-          const { user } = await api.completeOnboarding({ role });
-          setUser(user);
-          await refreshSession();
-        } catch {
-          // Phone/APK builds often can't reach the API — still enter the dashboard.
-          enterLocally(setState, role);
-        }
+      completeOnboarding: async (role, profile) => {
+        const { user } = await api.completeOnboarding({ role, profile });
+        setUser(user);
+        await refreshSession();
       },
       demoEnter: async (role) => {
-        try {
-          const { token, user } = await api.demoLogin(role);
-          setToken(token);
-          setUser(user, token);
-          await refreshSession();
-        } catch {
-          enterLocally(setState, role);
-        }
+        const { token, user } = await api.demoLogin(role);
+        setToken(token);
+        setUser(user, token);
+        await refreshSession();
       },
-      login: async (email, password, preferredRole) => {
-        try {
-          const { token, user } = await api.login({ email, password });
-          setToken(token);
-          setUser(user, token);
-          await refreshSession();
-        } catch (error) {
-          const normalized = email.trim().toLowerCase();
-          const isDemoPassword = password === "orbitly2025";
-          if (!isDemoPassword) {
-            throw error instanceof Error ? error : new Error("Invalid email or password");
-          }
-          if (preferredRole) {
-            enterLocally(setState, preferredRole);
-            return;
-          }
-          const isBrand =
-            normalized.includes("neha") ||
-            normalized.includes("brand") ||
-            normalized.includes("theloom") ||
-            normalized.endsWith("@brand.com");
-          const isCreator =
-            normalized.includes("aarohi") ||
-            normalized.includes("creator") ||
-            normalized.endsWith("@orbitly.app");
-          enterLocally(setState, isBrand ? "brand" : isCreator ? "creator" : "brand");
+      login: async (email, password, role) => {
+        const { token, user } = await api.login({ email, password, role });
+        setToken(token);
+        setUser(user, token);
+        await refreshSession();
+        return user;
+      },
+      googleLogin: async (idToken, role) => {
+        const result = await api.googleLogin({ idToken, role });
+        if (result.needsRole) {
+          return {
+            needsRole: true as const,
+            email: result.email || "",
+            name: result.name || "",
+          };
         }
+        if (!result.token || !result.user) {
+          throw new Error("Google sign-in failed");
+        }
+        setToken(result.token);
+        setUser(result.user, result.token);
+        await refreshSession();
+        return result.user;
       },
       resetSession: () => {
         setToken(null);
@@ -315,7 +259,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return booking;
       },
       filterCreators: (query: string) => {
-        // Prefer server-backed cache; local refine for snappy typing when online refresh pending
         const q = query.trim().toLowerCase();
         const { filters, creatorsCache, likedIds, savedIds } = state;
         let list = creatorsCache;
