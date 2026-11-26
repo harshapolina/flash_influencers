@@ -16,7 +16,8 @@ export function fail(res: Response, error: unknown, status = 400) {
   return res.status(status).json({ error: message });
 }
 
-function publicProfile(profile: Record<string, unknown>) {
+function publicProfile(profile?: Record<string, unknown> | null) {
+  if (!profile || typeof profile !== "object") return {};
   const social = profile.social;
   if (!social || typeof social !== "object") return profile;
   const cleaned: Record<string, unknown> = {};

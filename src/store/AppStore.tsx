@@ -47,7 +47,16 @@ type AppStoreValue = {
   toggleLike: (id: number) => Promise<void>;
   toggleSaveCreator: (id: number) => Promise<void>;
   toggleSaveCampaign: (id: string) => Promise<void>;
-  applyCampaign: (id: string) => Promise<void>;
+  applyCampaign: (id: string) => Promise<{
+    applied: boolean;
+    accepted?: boolean;
+    appliedCampaignIds: string[];
+    threadId?: string;
+  }>;
+  syncCampaignPrefs: (prefs: {
+    savedCampaignIds?: string[];
+    appliedCampaignIds?: string[];
+  }) => void;
   setFilters: (filters: Partial<ExploreFilters>) => void;
   clearFilters: () => void;
   addBooking: (input: {
@@ -56,6 +65,8 @@ type AppStoreValue = {
     price: number;
     date: string;
     location: string;
+    mode?: "instant" | "schedule";
+    brief?: string;
     multiplier?: number;
   }) => Promise<Booking>;
   filterCreators: (query: string) => Creator[];
@@ -139,7 +150,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         apiOnline: true,
       }));
       if (user.onboardingDone) {
-        const [creators, bookings] = await Promise.all([
+        const [creators, bookings, campaigns] = await Promise.all([
           api.listCreators({
             query: "",
             category: "all",
@@ -151,7 +162,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             savedOnly: false,
             sort: "match",
           }),
-          user.role === "brand" ? api.listBookings() : Promise.resolve({ bookings: [] }),
+          api.listBookings().catch(() => ({ bookings: [] as Booking[] })),
+          user.role === "creator"
+            ? api.listCampaigns({}).catch(() => ({
+                campaigns: [],
+                savedCampaignIds: [] as string[],
+                appliedCampaignIds: [] as string[],
+              }))
+            : Promise.resolve({
+                campaigns: [],
+                savedCampaignIds: [] as string[],
+                appliedCampaignIds: [] as string[],
+              }),
         ]);
         setState((s) => ({
           ...s,
@@ -159,15 +181,27 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           likedIds: creators.likedIds,
           savedIds: creators.savedIds,
           bookings: bookings.bookings,
+          savedCampaignIds: campaigns.savedCampaignIds || s.savedCampaignIds,
+          appliedCampaignIds: campaigns.appliedCampaignIds || s.appliedCampaignIds,
         }));
       }
-    } catch {
-      setToken(null);
+    } catch (error) {
+      const status = (error as { status?: number } | null)?.status;
+      // Only clear session on auth failure — keep the user signed in through API blips.
+      if (status === 401 || status === 403) {
+        setToken(null);
+        setState((s) => ({
+          ...s,
+          bootstrapping: false,
+          user: null,
+          onboardingDone: false,
+          apiOnline: false,
+        }));
+        return;
+      }
       setState((s) => ({
         ...s,
         bootstrapping: false,
-        user: null,
-        onboardingDone: false,
         apiOnline: false,
       }));
     }
@@ -176,6 +210,24 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshSession();
   }, [refreshSession]);
+
+  const syncCampaignPrefs = useCallback(
+    (prefs: { savedCampaignIds?: string[]; appliedCampaignIds?: string[] }) => {
+      setState((s) => {
+        const nextSaved = prefs.savedCampaignIds ?? s.savedCampaignIds;
+        const nextApplied = prefs.appliedCampaignIds ?? s.appliedCampaignIds;
+        const sameSaved =
+          nextSaved.length === s.savedCampaignIds.length &&
+          nextSaved.every((id, i) => id === s.savedCampaignIds[i]);
+        const sameApplied =
+          nextApplied.length === s.appliedCampaignIds.length &&
+          nextApplied.every((id, i) => id === s.appliedCampaignIds[i]);
+        if (sameSaved && sameApplied) return s;
+        return { ...s, savedCampaignIds: nextSaved, appliedCampaignIds: nextApplied };
+      });
+    },
+    [],
+  );
 
   const value = useMemo<AppStoreValue>(() => {
     return {
@@ -195,11 +247,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         await refreshSession();
       },
       login: async (email, password, role) => {
-        const { token, user } = await api.login({ email, password, role });
-        setToken(token);
-        setUser(user, token);
+        const result = await api.login({ email, password, role });
+        if (!result?.token || !result?.user) {
+          throw new Error("Login failed. Please try again.");
+        }
+        setToken(result.token);
+        setUser(result.user, result.token);
         await refreshSession();
-        return user;
+        return result.user;
       },
       googleLogin: async (idToken, role) => {
         const result = await api.googleLogin({ idToken, role });
@@ -250,6 +305,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       applyCampaign: async (id) => {
         const data = await api.applyCampaign(id);
         setState((s) => ({ ...s, appliedCampaignIds: data.appliedCampaignIds }));
+        return data;
       },
       setFilters: (filters) => setState((s) => ({ ...s, filters: { ...s.filters, ...filters } })),
       clearFilters: () => setState((s) => ({ ...s, filters: { ...defaultFilters } })),
@@ -258,6 +314,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setState((s) => ({ ...s, bookings: [booking, ...s.bookings] }));
         return booking;
       },
+      syncCampaignPrefs,
       filterCreators: (query: string) => {
         const q = query.trim().toLowerCase();
         const { filters, creatorsCache, likedIds, savedIds } = state;
@@ -283,7 +340,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return list;
       },
     };
-  }, [state, setUser, refreshSession, refreshCreators]);
+  }, [state, setUser, refreshSession, refreshCreators, syncCampaignPrefs]);
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
 }

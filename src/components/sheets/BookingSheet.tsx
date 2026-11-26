@@ -16,12 +16,16 @@ export function BookingSheet({
     price: number;
     date: string;
     location: string;
+    mode: "instant" | "schedule";
+    brief: string;
   }) => void;
   onClose: () => void;
 }) {
   const [deliverableId, setDeliverableId] = useState<(typeof DELIVERABLES)[number]["id"]>("reel");
   const [date, setDate] = useState("28 Jun");
   const [location, setLocation] = useState(creator.city);
+  const [mode, setMode] = useState<"instant" | "schedule">("schedule");
+  const [brief, setBrief] = useState("");
 
   const selected = DELIVERABLES.find((d) => d.id === deliverableId) ?? DELIVERABLES[0];
   const subtotal = Math.round(creator.priceValue * selected.multiplier);
@@ -38,10 +42,11 @@ export function BookingSheet({
           <div className="success-check">
             <Icon name="check" size={30} />
           </div>
-          <h2>Request sent</h2>
+          <h2>{mode === "instant" ? "Booked instantly" : "Request sent"}</h2>
           <p>
-            {creator.name.split(" ")[0]} has 24 hours to respond. We’ll notify you when the status
-            changes.
+            {mode === "instant"
+              ? `${creator.name.split(" ")[0]} is confirmed. Chat is open and work is live on their Active tab.`
+              : `${creator.name.split(" ")[0]} has 24 hours to OK this schedule. They’ll get a notification, Active work card, and full brief.`}
           </p>
           <div>
             <span>BOOKING ID</span>
@@ -79,6 +84,30 @@ export function BookingSheet({
             4.9
           </span>
         </div>
+
+        <label>BOOKING TYPE</label>
+        <div className="option-pills booking-mode-pills">
+          <button
+            type="button"
+            className={mode === "instant" ? "active" : ""}
+            onClick={() => setMode("instant")}
+          >
+            Instant
+          </button>
+          <button
+            type="button"
+            className={mode === "schedule" ? "active" : ""}
+            onClick={() => setMode("schedule")}
+          >
+            Schedule
+          </button>
+        </div>
+        <p className="booking-mode-hint">
+          {mode === "instant"
+            ? "Confirms immediately. Creator sees Active work + chat right away."
+            : "Sends an invite. Creator gets a notification and must tap OK to work."}
+        </p>
+
         <label>SELECT DELIVERABLE</label>
         {DELIVERABLES.map((item) => (
           <button
@@ -123,6 +152,16 @@ export function BookingSheet({
             </strong>
           </button>
         </div>
+
+        <label>BRIEF (OPTIONAL)</label>
+        <textarea
+          className="booking-brief-input"
+          rows={3}
+          value={brief}
+          onChange={(e) => setBrief(e.target.value)}
+          placeholder="Key messages, must-include products, tone, references…"
+        />
+
         <div className="booking-total">
           <span>
             Estimated total <small>Includes {formatInr(fee)} platform fee</small>
@@ -138,13 +177,19 @@ export function BookingSheet({
               price: total,
               date,
               location,
+              mode,
+              brief: brief.trim(),
             })
           }
         >
-          Send booking request <Icon name="arrow" size={16} />
+          {mode === "instant" ? "Book instantly" : "Send schedule request"}{" "}
+          <Icon name="arrow" size={16} />
         </button>
         <p className="booking-note">
-          <Icon name="shield" size={13} /> No charge until {creator.name.split(" ")[0]} accepts
+          <Icon name="shield" size={13} />{" "}
+          {mode === "instant"
+            ? `Chat opens immediately with ${creator.name.split(" ")[0]}`
+            : `No charge until ${creator.name.split(" ")[0]} accepts`}
         </p>
       </div>
     </div>

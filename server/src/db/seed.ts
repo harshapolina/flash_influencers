@@ -267,6 +267,13 @@ const workItems: WorkItem[] = [
   },
 ];
 
+const now = new Date();
+const monthsAgo = (n: number) => {
+  const d = new Date(now);
+  d.setMonth(d.getMonth() - n);
+  return d.toISOString();
+};
+
 const transactions: Transaction[] = [
   {
     id: "tx-1",
@@ -275,7 +282,11 @@ const transactions: Transaction[] = [
     desc: "Summer Edit milestone",
     amount: "+₹18,000",
     status: "Paid",
-    createdAt: new Date().toISOString(),
+    createdAt: now.toISOString(),
+    brand: "The Loom",
+    client: "The Loom Apparel",
+    business: "Summer Edit 2025",
+    campaignId: "camp-5",
   },
   {
     id: "tx-2",
@@ -284,7 +295,11 @@ const transactions: Transaction[] = [
     desc: "Monsoon campaign",
     amount: "+₹24,000",
     status: "Processing",
-    createdAt: new Date().toISOString(),
+    createdAt: now.toISOString(),
+    brand: "Nura Beauty",
+    client: "Nura Beauty Pvt Ltd",
+    business: "Monsoon Skin Reset",
+    campaignId: "camp-1",
   },
   {
     id: "tx-3",
@@ -293,7 +308,36 @@ const transactions: Transaction[] = [
     desc: "Platform fee",
     amount: "−₹1,920",
     status: "Fee",
-    createdAt: new Date().toISOString(),
+    createdAt: now.toISOString(),
+    brand: "Orbitly",
+    client: "Orbitly",
+    business: "Platform fee",
+  },
+  {
+    id: "tx-4",
+    creatorUserId: "system",
+    name: "Flex Society",
+    desc: "Everyday Active payout",
+    amount: "+₹12,500",
+    status: "Paid",
+    createdAt: monthsAgo(1),
+    brand: "Flex Society",
+    client: "Flex Society Fitness",
+    business: "Everyday Active",
+    campaignId: "camp-2",
+  },
+  {
+    id: "tx-5",
+    creatorUserId: "system",
+    name: "Glow Labs",
+    desc: "UGC pack",
+    amount: "+₹9,800",
+    status: "Paid",
+    createdAt: monthsAgo(2),
+    brand: "Plum",
+    client: "Glow Labs / Plum",
+    business: "Glow From Within",
+    campaignId: "camp-4",
   },
 ];
 

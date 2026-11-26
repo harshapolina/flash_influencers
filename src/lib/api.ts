@@ -3,8 +3,9 @@ import { Capacitor } from "@capacitor/core";
 function resolveApiBase() {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
   if (Capacitor.isNativePlatform()) {
-    // USB: adb reverse tcp:3001 tcp:3001
-    // Wi-Fi: set VITE_API_URL=http://YOUR_LAN_IP:3001/api
+    // Android emulator → host machine loopback
+    if (Capacitor.getPlatform() === "android") return "http://10.0.2.2:3001/api";
+    // iOS simulator / USB with adb reverse: localhost works
     return "http://localhost:3001/api";
   }
   return "/api";
@@ -51,7 +52,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     );
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const err = new Error(data.error || `Request failed (${res.status})`) as Error & {
+      status?: number;
+    };
+    err.status = res.status;
+    throw err;
+  }
   return data as T;
 }
 
@@ -119,29 +126,46 @@ export const api = {
     request<{ likedIds: number[]; liked: boolean }>(`/creators/${id}/like`, { method: "POST" }),
   saveCreator: (id: number) =>
     request<{ savedIds: number[]; saved: boolean }>(`/creators/${id}/save`, { method: "POST" }),
-  listCampaigns: (params: Record<string, string | boolean> = {}) => {
+  listCampaigns: (params: Record<string, string | number | boolean> = {}) => {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => qs.set(k, String(v)));
-    return request<any>(`/campaigns?${qs.toString()}`);
+    return request<{
+      campaigns: import("../types").Campaign[];
+      savedCampaignIds?: string[];
+      appliedCampaignIds?: string[];
+      bookings?: import("../types").Booking[];
+      counts?: Record<string, number>;
+    }>(`/campaigns?${qs.toString()}`);
   },
   saveCampaign: (id: string) =>
     request<{ savedCampaignIds: string[]; saved: boolean }>(`/campaigns/${id}/save`, {
       method: "POST",
     }),
   applyCampaign: (id: string) =>
-    request<{ applied: boolean; appliedCampaignIds: string[] }>(`/campaigns/${id}/apply`, {
+    request<{
+      applied: boolean;
+      accepted?: boolean;
+      appliedCampaignIds: string[];
+      threadId?: string;
+    }>(`/campaigns/${id}/apply`, {
       method: "POST",
     }),
   myWork: (bucket?: string) =>
     request<{ items: import("../types").WorkItem[]; counts: Record<string, number> }>(
       `/campaigns/work/mine${bucket ? `?bucket=${bucket}` : ""}`,
     ),
+  acceptWork: (id: string) =>
+    request<{ item: import("../types").WorkItem }>(`/campaigns/work/${id}/accept`, {
+      method: "POST",
+    }),
   createBooking: (body: {
     creatorId: number;
     deliverable: string;
     price?: number;
     date: string;
     location: string;
+    mode?: "instant" | "schedule";
+    brief?: string;
     multiplier?: number;
   }) =>
     request<{ booking: import("../types").Booking }>("/bookings", {
@@ -149,12 +173,34 @@ export const api = {
       body: JSON.stringify(body),
     }),
   listBookings: () => request<{ bookings: import("../types").Booking[] }>("/bookings"),
+  acceptBooking: (id: string) =>
+    request<{ booking: import("../types").Booking; work?: import("../types").WorkItem }>(
+      `/bookings/${id}/accept`,
+      { method: "POST" },
+    ),
+  declineBooking: (id: string) =>
+    request<{ booking: import("../types").Booking }>(`/bookings/${id}/decline`, {
+      method: "POST",
+    }),
   listMessages: (tab = "all") =>
     request<{ messages: import("../types").InboxMessage[]; unreadCount: number }>(
       `/messages?tab=${tab}`,
     ),
   markMessageRead: (id: string) =>
     request<{ ok: boolean }>(`/messages/${id}/read`, { method: "POST" }),
+  getThread: (threadId: string) =>
+    request<{
+      threadId: string;
+      bookingId?: string;
+      campaign: string;
+      peer: { id?: string; name: string; image: string };
+      messages: import("../types").ChatLine[];
+    }>(`/messages/thread/${threadId}`),
+  sendThreadMessage: (threadId: string, text: string) =>
+    request<{ message: import("../types").ChatLine }>(`/messages/thread/${threadId}/send`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
   earnings: () => request<any>("/earnings"),
   withdraw: () => request<{ ok: boolean; available: number }>("/earnings/withdraw", { method: "POST" }),
   searchPlaces: (q: string) =>

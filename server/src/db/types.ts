@@ -64,29 +64,54 @@ export type Campaign = {
   due: string;
   deliverables: string;
   needsAttention?: string;
+  bookingId?: string;
+  bookingMode?: "instant" | "schedule";
+  location?: string;
+  brief?: string;
+  source?: "seed" | "booking";
 };
 
 export type Booking = {
   id: string;
   brandUserId: string;
+  brandName: string;
   creatorId: number;
+  creatorUserId?: string;
   deliverable: string;
   price: number;
   date: string;
   location: string;
-  status: "pending" | "accepted" | "completed";
+  mode: "instant" | "schedule";
+  brief: string;
+  status: "pending" | "accepted" | "completed" | "declined";
+  campaignId?: string;
+  workItemId?: string;
+  threadId?: string;
   createdAt: string;
 };
 
 export type Message = {
   id: string;
   userId: string;
-  peerCreatorId: number;
+  peerUserId?: string;
+  peerCreatorId?: number;
+  peerName?: string;
+  peerImage?: string;
   preview: string;
   campaign: string;
   time: string;
   unread: number;
   category: "campaigns" | "general";
+  threadId?: string;
+  bookingId?: string;
+};
+
+export type ChatMessage = {
+  id: string;
+  threadId: string;
+  senderUserId: string;
+  text: string;
+  createdAt: string;
 };
 
 export type WorkItem = {
@@ -100,6 +125,14 @@ export type WorkItem = {
   due: string;
   bucket: "active" | "applications" | "completed";
   campaignId?: string;
+  bookingId?: string;
+  brandUserId?: string;
+  mode?: "instant" | "schedule";
+  needsAccept?: boolean;
+  threadId?: string;
+  pay?: string;
+  location?: string;
+  brief?: string;
 };
 
 export type Transaction = {
@@ -110,6 +143,10 @@ export type Transaction = {
   amount: string;
   status: string;
   createdAt: string;
+  brand?: string;
+  client?: string;
+  business?: string;
+  campaignId?: string;
 };
 
 export type UserPrefs = {
@@ -127,6 +164,7 @@ export type Database = {
   campaigns: Campaign[];
   bookings: Booking[];
   messages: Message[];
+  chatMessages: ChatMessage[];
   workItems: WorkItem[];
   transactions: Transaction[];
   prefs: UserPrefs[];

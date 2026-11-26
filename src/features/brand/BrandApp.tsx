@@ -76,7 +76,12 @@ export function BrandApp() {
           onSuccess={async (payload) => {
             const booking = await addBooking({
               creatorId: selected.id,
-              ...payload,
+              deliverable: payload.deliverable,
+              price: payload.price,
+              date: payload.date,
+              location: payload.location,
+              mode: payload.mode,
+              brief: payload.brief,
               multiplier: payload.deliverable.includes("Stories") ? 1.5 : 1,
             });
             setSuccessId(booking.id);

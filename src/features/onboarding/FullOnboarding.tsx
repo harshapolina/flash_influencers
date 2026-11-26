@@ -74,7 +74,12 @@ export function FullOnboarding({
       phase: "role",
       step: nextStep,
       role,
-      answers: { ...answers, [steps[step][0]]: answers[steps[step][0]] || [] },
+      answers: {
+        ...answers,
+        ...(steps[step]?.[0]
+          ? { [steps[step][0]]: answers[steps[step][0]] || [] }
+          : {}),
+      },
       profile: { fields },
     });
   };
@@ -225,10 +230,11 @@ export function FullOnboarding({
     setError("");
     try {
       const user = await login(email.trim(), password, role);
+      if (!user) throw new Error("Login succeeded but no user was returned");
       if (user.onboardingDone) return;
-      setEmail(user.email);
-      setFullName(user.name);
-      setRole(user.role);
+      setEmail(user.email || email.trim());
+      setFullName(user.name || "");
+      setRole(user.role || role);
       if (user.onboardingPhase === "role") {
         setPhase("role");
         setStep(user.onboardingStep || 0);
@@ -684,6 +690,18 @@ export function FullOnboarding({
       );
     }
     return <AnimatedAccountSuccess role={role} onContinue={advanceCommon} />;
+  }
+
+  if (!current) {
+    return (
+      <div className="flow-screen">
+        <StatusBar />
+        <p className="flow-error">Onboarding step is out of range. Go back and try again.</p>
+        <button className="flow-primary" type="button" onClick={() => setStep(0)}>
+          Restart step
+        </button>
+      </div>
+    );
   }
 
   if (step === steps.length - 1) {
@@ -2298,7 +2316,7 @@ function AnimatedLocationMap({
     const timer = window.setTimeout(() => {
       api
         .searchPlaces(text)
-        .then((data) => setResults(data.places))
+        .then((data) => setResults(data.places || []))
         .catch(() => setResults([]));
     }, 350);
     return () => window.clearTimeout(timer);

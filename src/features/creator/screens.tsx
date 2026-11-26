@@ -34,19 +34,27 @@ function profileStrength(profile?: Record<string, unknown>) {
 
 export function CreatorHomeScreen({
   onExplore,
+  onOpenCampaign,
   onWork,
   onEarnings,
+  onNotifications,
+  onInbox,
+  onAnalytics,
+  onProfile,
 }: {
   onExplore: () => void;
+  onOpenCampaign?: (campaignId: string) => void;
   onWork?: () => void;
   onEarnings?: () => void;
+  onNotifications?: () => void;
+  onInbox?: () => void;
+  onAnalytics?: () => void;
+  onProfile?: () => void;
 }) {
   const { state, refreshSession } = useAppStore();
   const [campaigns, setCampaigns] = useState<Array<Campaign & { icon?: string; type?: string; pay?: string; match?: number }>>([]);
   const [work, setWork] = useState<WorkItem[]>([]);
   const [earnings, setEarnings] = useState<{ available: number; earnedThisMonth: number } | null>(null);
-  const [showNotes, setShowNotes] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
 
   useEffect(() => {
     api.listCampaigns({}).then((data) => setCampaigns(data.campaigns || [])).catch(() => {});
@@ -81,24 +89,11 @@ export function CreatorHomeScreen({
             </span>
           </strong>
         </div>
-        <button className="round-button" type="button" onClick={() => setShowNotes((open) => !open)}>
+        <button className="round-button" type="button" onClick={onNotifications}>
           <Icon name="bell" size={19} />
           {work.length > 0 && <i />}
         </button>
       </header>
-      {showNotes && (
-        <section className="creator-active-work">
-          <div className="active-work-copy">
-            <span>UPDATES</span>
-            <strong>{work.length ? `${work.length} campaign updates` : "No updates yet"}</strong>
-            <small>
-              {work.length
-                ? work.map((item) => `${item.brand}: ${item.status}`).join(" · ")
-                : "Applications and payouts will show up here."}
-            </small>
-          </div>
-        </section>
-      )}
 
       <section className="creator-wallet-hero">
         <div className="wallet-copy">
@@ -110,7 +105,7 @@ export function CreatorHomeScreen({
             <b>+₹{month.toLocaleString("en-IN")}</b> earned this month
           </p>
           <button type="button" onClick={onEarnings}>
-            Withdraw earnings <Icon name="arrow" size={14} />
+            {available > 0 ? "Withdraw earnings" : "View earnings"} <Icon name="arrow" size={14} />
           </button>
         </div>
         <div className="wallet-visual">
@@ -133,7 +128,7 @@ export function CreatorHomeScreen({
               : "Location, social accounts, portfolio, pricing, availability, and payout each raise this."}
           </small>
         </div>
-        <button>
+        <button type="button" onClick={onProfile}>
           <Icon name="chevron" size={15} />
         </button>
       </section>
@@ -167,8 +162,11 @@ export function CreatorHomeScreen({
         {campaigns.map((campaign, index) => (
           <button
             className={`opportunity-tile ot-${index}`}
-            onClick={onExplore}
-            key={campaign.title}
+            type="button"
+            onClick={() =>
+              onOpenCampaign ? onOpenCampaign(campaign.id) : onExplore()
+            }
+            key={campaign.id || campaign.title}
           >
             <div className="opportunity-tile-top">
               <span className="brand-glyph">{campaign.icon}</span>
@@ -207,7 +205,11 @@ export function CreatorHomeScreen({
       </div>
 
       <SectionTitle title="Active campaign" action="View work" onClick={onWork} />
-      <section className="creator-active-work">
+      <button
+        type="button"
+        className="creator-active-work"
+        onClick={() => (active ? onWork?.() : onExplore())}
+      >
         <div className="active-work-brand">{(active?.brand || "—").slice(0, 2).toUpperCase()}</div>
         <div className="active-work-copy">
           <span>{active ? `${active.brand} · ${active.title}` : "NO ACTIVE WORK"}</span>
@@ -217,27 +219,26 @@ export function CreatorHomeScreen({
           </div>
           <small>{active ? `Due ${active.due}` : "Your work list is empty"}</small>
         </div>
-        <button>
+        <span className="active-work-chevron">
           <Icon name="chevron" size={15} />
+        </span>
+      </button>
+
+      <SectionTitle title="This month" action="Analytics" onClick={onAnalytics} />
+      <section className="creator-quick-actions">
+        <button type="button" onClick={onInbox}>
+          <Icon name="message" size={16} />
+          Messages
+        </button>
+        <button type="button" onClick={onNotifications}>
+          <Icon name="bell" size={16} />
+          Alerts
+        </button>
+        <button type="button" onClick={onAnalytics}>
+          <Icon name="trending" size={16} />
+          Analytics
         </button>
       </section>
-
-      <SectionTitle title="This month" action="Analytics" onClick={() => setShowAnalytics((open) => !open)} />
-      {showAnalytics && (
-        <section className="creator-performance-card">
-          {accounts.length === 0 && <p>Connect Instagram or YouTube to see analytics.</p>}
-          {accounts.map((account) => (
-            <div key={account.platform}>
-              <span>{account.platform.toUpperCase()}</span>
-              <strong>{formatSocialCount(account.followers)} followers</strong>
-              <small>
-                {account.views ? `${formatSocialCount(account.views)} avg views` : "No view count yet"}
-                {account.viewRate ? ` · ${account.viewRate}% view rate` : ""}
-              </small>
-            </div>
-          ))}
-        </section>
-      )}
       <section className="creator-performance-card">
         <div>
           <span>CONTENT REACH</span>
@@ -265,28 +266,84 @@ function formatSocialCount(value?: number) {
   return String(value);
 }
 
-function ConnectedAccounts({ social }: { social: unknown }) {
+function ConnectedAccounts({
+  social,
+  onManage,
+}: {
+  social: unknown;
+  onManage?: () => void;
+}) {
   const accounts = social && typeof social === "object" ? (Object.values(social) as SocialAccount[]) : [];
   if (!accounts.length) return null;
   return (
-    <div className="creator-profile-menu">
-      {accounts.map((account) => (
-        <a key={account.platform} href={account.url} target="_blank" rel="noreferrer">
-          <span>
-            <Icon name={account.platform === "youtube" ? "youtube" : "instagram"} size={17} />
-          </span>
-          <strong>
-            {account.name} · {formatSocialCount(account.followers)}
-            {account.viewRate ? ` · ${account.viewRate}% views` : ""}
-          </strong>
-          <Icon name="chevron" size={15} />
-        </a>
-      ))}
-    </div>
+    <section className="profile-section-card">
+      <header className="profile-section-head">
+        <div>
+          <small>CONNECTED</small>
+          <strong>Social accounts</strong>
+        </div>
+        {onManage && (
+          <button type="button" onClick={onManage}>
+            Manage
+          </button>
+        )}
+      </header>
+      <div className="creator-profile-menu flat profile-social-list">
+        {accounts.map((account) => (
+          <a key={account.platform} href={account.url} target="_blank" rel="noreferrer">
+            <span>
+              <Icon name={account.platform === "youtube" ? "youtube" : "instagram"} size={17} />
+            </span>
+            <div className="profile-social-copy">
+              <strong>{account.name || account.handle || account.platform}</strong>
+              <small>
+                {account.platform === "youtube" ? "YouTube" : "Instagram"}
+                {account.handle ? ` · ${account.handle}` : ""}
+                {" · "}
+                {formatSocialCount(account.followers)}{" "}
+                {(account.followers || 0) === 1 ? "follower" : "followers"}
+                {account.viewRate ? ` · ${account.viewRate}% views` : ""}
+              </small>
+            </div>
+            <Icon name="chevron" size={15} />
+          </a>
+        ))}
+      </div>
+    </section>
   );
 }
 
-export function CreatorAppProfile() {
+function nextProfileGap(profile?: Record<string, unknown>) {
+  const fields = (profile?.fields || {}) as Record<string, string>;
+  if (!fields["Personal Information:DISPLAY NAME"] && !fields["Personal Information:LEGAL NAME"]) {
+    return "Public profile" as const;
+  }
+  if (!fields["Location Details:LOCATION"]) return "Public profile" as const;
+  if (!socialAccounts(profile).length) return "Social accounts" as const;
+  if (!fields["Content Portfolio:LINK"]) return "Portfolio" as const;
+  if (!fields["Pricing Preferences:AMOUNT"]) return "Pricing & packages" as const;
+  if (!fields["Availability:SCHEDULE"]) return "Availability" as const;
+  if (!fields["Payment Information:UPI ID"]) return "Settings & privacy" as const;
+  return "Public profile" as const;
+}
+
+export function CreatorAppProfile({
+  onNotifications,
+  onOpenPage,
+}: {
+  onNotifications?: () => void;
+  onOpenPage?: (
+    page:
+      | "Public profile"
+      | "Portfolio"
+      | "Social accounts"
+      | "Pricing & packages"
+      | "Availability"
+      | "Verification"
+      | "Settings & privacy"
+      | "Creator support",
+  ) => void;
+}) {
   const { state, resetSession, refreshSession } = useAppStore();
   useEffect(() => {
     refreshSession().catch(() => {});
@@ -295,33 +352,30 @@ export function CreatorAppProfile() {
   const fields = (state.user?.profile?.fields || {}) as Record<string, string>;
   const answers = (state.user?.profile?.answers || {}) as Record<string, string[]>;
   const name = fields["Personal Information:DISPLAY NAME"] || state.user?.name || "Creator";
-  const handle = accounts[0]?.handle || fields["Personal Information:CREATOR USERNAME"] || state.user?.email || "";
+  const handle =
+    accounts[0]?.handle ||
+    fields["Personal Information:CREATOR USERNAME"] ||
+    state.user?.email ||
+    "";
   const city = fields["Location Details:LOCATION"] || "Location not added";
   const avatar = accounts.find((account) => account.avatar)?.avatar || state.user?.avatarUrl || "";
   const followers = accounts.reduce((sum, account) => sum + (account.followers || 0), 0);
   const strength = profileStrength(state.user?.profile);
-  const tags = [
-    ...(answers["Creator Category"] || []),
-    ...(answers["Content Categories"] || []),
-  ].slice(0, 3);
-  const [openDetail, setOpenDetail] = useState("");
-  const details: Record<string, string> = {
-    "Public profile": `${name} · ${handle}`,
-    Portfolio: fields["Content Portfolio:LINK"] || "No portfolio link saved",
-    "Social accounts": accounts.map((account) => account.handle).join(", ") || "No account connected",
-    "Pricing & packages": fields["Pricing Preferences:AMOUNT"]
-      ? `Starting at ₹${Number(fields["Pricing Preferences:AMOUNT"]).toLocaleString("en-IN")}`
-      : "No starting price saved",
-    Availability: fields["Availability:SCHEDULE"] ? "Schedule saved" : "No availability saved",
-    Verification: state.user?.emailVerified ? "Email verified" : "Email not verified",
-    "Settings & privacy": state.user?.email || "",
-    "Creator support": "Write to the address on your account email",
-  };
+  const gap = nextProfileGap(state.user?.profile);
+  const tags = Array.from(
+    new Set([...(answers["Creator Category"] || []), ...(answers["Content Categories"] || [])]),
+  ).slice(0, 4);
+
   return (
     <div className="screen creator-app-profile">
       <StatusBar />
       <header className="creator-profile-hero">
-        <button className="round-button" type="button">
+        <button
+          className="round-button profile-bell"
+          type="button"
+          aria-label="Notifications"
+          onClick={onNotifications}
+        >
           <Icon name="bell" size={18} />
         </button>
         <div className="creator-profile-image">
@@ -334,14 +388,24 @@ export function CreatorAppProfile() {
         </div>
         <h1>{name}</h1>
         <p>
-          {handle} · {city}
+          {handle}
+          <i>·</i>
+          {city}
         </p>
         <div className="creator-profile-tags">
           {(tags.length ? tags : ["Creator"]).map((tag) => (
             <span key={tag}>{tag}</span>
           ))}
         </div>
+        <button
+          type="button"
+          className="edit-creator-profile"
+          onClick={() => onOpenPage?.("Public profile")}
+        >
+          View public profile
+        </button>
       </header>
+
       <div className="creator-profile-stats">
         <div>
           <strong>{formatSocialCount(followers)}</strong>
@@ -356,30 +420,48 @@ export function CreatorAppProfile() {
           <span>Connected</span>
         </div>
       </div>
-      <div className="profile-strength-card">
+
+      <button
+        type="button"
+        className="profile-strength-card as-button"
+        onClick={() => onOpenPage?.(gap)}
+      >
         <span>PROFILE COMPLETION</span>
         <div>
           <i style={{ width: `${strength}%` }} />
         </div>
         <p>
           <strong>{strength}% complete</strong>
-          <small>Filled from the details you saved during onboarding</small>
+          <small>{strength === 100 ? "Profile looks complete" : `Next: ${gap}`}</small>
         </p>
-      </div>
-      <ConnectedAccounts social={state.user?.profile?.social} />
-      <div className="creator-profile-menu">
-        {[
-          ["Public profile", "user"],
-          ["Portfolio", "camera"],
-          ["Social accounts", "instagram"],
-          ["Pricing & packages", "wallet"],
-          ["Availability", "calendar"],
-          ["Verification", "shield"],
-          ["Settings & privacy", "filter"],
-          ["Creator support", "message"],
-        ].map(([label, icon]) => (
-          <div key={label}>
-            <button type="button" onClick={() => setOpenDetail(openDetail === label ? "" : label)}>
+      </button>
+
+      <ConnectedAccounts
+        social={state.user?.profile?.social}
+        onManage={() => onOpenPage?.("Social accounts")}
+      />
+
+      <section className="profile-section-card">
+        <header className="profile-section-head">
+          <div>
+            <small>ACCOUNT</small>
+            <strong>Manage profile</strong>
+          </div>
+        </header>
+        <div className="creator-profile-menu flat">
+          {(
+            [
+              ["Public profile", "user"],
+              ["Portfolio", "camera"],
+              ["Social accounts", "instagram"],
+              ["Pricing & packages", "wallet"],
+              ["Availability", "calendar"],
+              ["Verification", "shield"],
+              ["Settings & privacy", "filter"],
+              ["Creator support", "message"],
+            ] as const
+          ).map(([label, icon]) => (
+            <button key={label} type="button" onClick={() => onOpenPage?.(label)}>
               <span>
                 <Icon name={icon as IconName} size={17} />
               </span>
@@ -387,17 +469,16 @@ export function CreatorAppProfile() {
               {label === "Verification" && state.user?.emailVerified && <b>VERIFIED</b>}
               <Icon name="chevron" size={15} />
             </button>
-            {openDetail === label && details[label] && <p className="flow-error">{details[label]}</p>}
-          </div>
-        ))}
-        <button type="button" onClick={resetSession}>
-          <span>
-            <Icon name="close" size={17} />
-          </span>
-          <strong>Sign out</strong>
-          <Icon name="chevron" size={15} />
-        </button>
-      </div>
+          ))}
+          <button type="button" className="profile-signout" onClick={resetSession}>
+            <span>
+              <Icon name="close" size={17} />
+            </span>
+            <strong>Sign out</strong>
+            <Icon name="chevron" size={15} />
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

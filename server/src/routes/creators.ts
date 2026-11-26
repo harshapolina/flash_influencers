@@ -45,19 +45,22 @@ creatorsRouter.get("/", optionalAuth, async (req: AuthedRequest, res) => {
         q.city &&
         q.city !== "All" &&
         q.niche !== "Nearby" &&
-        c.city.toLowerCase() !== q.city.toLowerCase()
+        (c.city || "").toLowerCase() !== q.city.toLowerCase()
       ) {
         return false;
       }
       if (q.availableOnly && !c.available) return false;
-      if (c.followersCount < q.minFollowers || c.followersCount > q.maxFollowers) return false;
+      if ((c.followersCount ?? 0) < q.minFollowers || (c.followersCount ?? 0) > q.maxFollowers) {
+        return false;
+      }
       if (q.niche && q.niche !== "For you") {
         const niche = q.niche.toLowerCase();
-        if (niche === "nearby") return ["Mumbai", "Pune"].includes(c.city);
+        if (niche === "nearby") return ["Mumbai", "Pune"].includes(c.city || "");
         if (niche === "available now") return c.available;
+        const tags = Array.isArray(c.tags) ? c.tags : [];
         if (
-          !c.tags.some((t) => t.toLowerCase() === niche) &&
-          !c.niche.toLowerCase().includes(niche)
+          !tags.some((t) => String(t).toLowerCase() === niche) &&
+          !(c.niche || "").toLowerCase().includes(niche)
         ) {
           return false;
         }

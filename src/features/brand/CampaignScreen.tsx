@@ -21,9 +21,13 @@ export function CampaignScreen({ onOpenExplore }: { onOpenExplore?: () => void }
       .listCampaigns({ status: tab })
       .then((data) => {
         if (!alive) return;
-        setCampaigns(data.campaigns || []);
+        setCampaigns((data.campaigns || []) as BrandCampaign[]);
         setBookings(data.bookings || state.bookings);
-        setCounts(data.counts || counts);
+        setCounts({
+          active: data.counts?.active || 0,
+          applications: data.counts?.applications || 0,
+          completed: data.counts?.completed || 0,
+        });
       })
       .catch(() => {
         setBookings(state.bookings);

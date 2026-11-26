@@ -35,7 +35,7 @@ const OtpSchema = new Schema(
 const CreatorSchema = new Schema(
   {
     id: { type: Number, required: true, unique: true, index: true },
-    userId: String,
+    userId: { type: String, index: true },
     name: String,
     handle: String,
     city: String,
@@ -74,6 +74,11 @@ const CampaignSchema = new Schema(
     due: String,
     deliverables: String,
     needsAttention: String,
+    bookingId: String,
+    bookingMode: { type: String, enum: ["instant", "schedule"] },
+    location: String,
+    brief: String,
+    source: { type: String, enum: ["seed", "booking"], default: "seed" },
   },
   { versionKey: false },
 );
@@ -82,12 +87,23 @@ const BookingSchema = new Schema(
   {
     id: { type: String, required: true, unique: true, index: true },
     brandUserId: { type: String, index: true },
-    creatorId: Number,
+    brandName: String,
+    creatorId: { type: Number, index: true },
+    creatorUserId: { type: String, index: true },
     deliverable: String,
     price: Number,
     date: String,
     location: String,
-    status: { type: String, enum: ["pending", "accepted", "completed"] },
+    mode: { type: String, enum: ["instant", "schedule"], default: "schedule" },
+    brief: String,
+    status: {
+      type: String,
+      enum: ["pending", "accepted", "completed", "declined"],
+      default: "pending",
+    },
+    campaignId: String,
+    workItemId: String,
+    threadId: String,
     createdAt: String,
   },
   { versionKey: false },
@@ -97,12 +113,28 @@ const MessageSchema = new Schema(
   {
     id: { type: String, required: true, unique: true, index: true },
     userId: { type: String, index: true },
+    peerUserId: String,
     peerCreatorId: Number,
+    peerName: String,
+    peerImage: String,
     preview: String,
     campaign: String,
     time: String,
     unread: Number,
     category: { type: String, enum: ["campaigns", "general"] },
+    threadId: { type: String, index: true },
+    bookingId: String,
+  },
+  { versionKey: false },
+);
+
+const ChatMessageSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    threadId: { type: String, required: true, index: true },
+    senderUserId: { type: String, required: true, index: true },
+    text: { type: String, required: true },
+    createdAt: { type: String, required: true },
   },
   { versionKey: false },
 );
@@ -119,6 +151,14 @@ const WorkItemSchema = new Schema(
     due: String,
     bucket: { type: String, enum: ["active", "applications", "completed"] },
     campaignId: String,
+    bookingId: { type: String, index: true },
+    brandUserId: String,
+    mode: { type: String, enum: ["instant", "schedule"] },
+    needsAccept: Boolean,
+    threadId: String,
+    pay: String,
+    location: String,
+    brief: String,
   },
   { versionKey: false },
 );
@@ -132,6 +172,10 @@ const TransactionSchema = new Schema(
     amount: String,
     status: String,
     createdAt: String,
+    brand: String,
+    client: String,
+    business: String,
+    campaignId: { type: String, index: true },
   },
   { versionKey: false },
 );
@@ -154,6 +198,8 @@ export const CampaignModel =
   mongoose.models.Campaign || mongoose.model("Campaign", CampaignSchema);
 export const BookingModel = mongoose.models.Booking || mongoose.model("Booking", BookingSchema);
 export const MessageModel = mongoose.models.Message || mongoose.model("Message", MessageSchema);
+export const ChatMessageModel =
+  mongoose.models.ChatMessage || mongoose.model("ChatMessage", ChatMessageSchema);
 export const WorkItemModel =
   mongoose.models.WorkItem || mongoose.model("WorkItem", WorkItemSchema);
 export const TransactionModel =

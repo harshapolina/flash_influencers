@@ -62,6 +62,17 @@ export type Campaign = {
   tags: string[];
   applyBy: string;
   match?: number;
+  bookingId?: string;
+  bookingMode?: "instant" | "schedule";
+  location?: string;
+  brief?: string;
+  source?: "seed" | "booking";
+  deliverables?: string;
+  status?: "active" | "applications" | "completed";
+  progress?: number;
+  creatorsConfirmed?: string;
+  due?: string;
+  needsAttention?: string;
 };
 
 export type BrandCampaign = {
@@ -78,24 +89,41 @@ export type BrandCampaign = {
 
 export type InboxMessage = {
   id: string;
-  creatorId: number;
+  creatorId?: number;
   creatorName?: string;
   creatorImage?: string;
+  peerUserId?: string;
   preview: string;
   campaign: string;
   time: string;
   unread: number;
   category: "campaigns" | "general";
+  threadId?: string;
+  bookingId?: string;
+};
+
+export type ChatLine = {
+  id: string;
+  senderUserId: string;
+  text: string;
+  createdAt: string;
+  mine: boolean;
 };
 
 export type Booking = {
   id: string;
   creatorId: number;
+  brandName?: string;
   deliverable: string;
   price: number;
   date: string;
   location: string;
-  status: "pending" | "accepted" | "completed";
+  mode?: "instant" | "schedule";
+  brief?: string;
+  status: "pending" | "accepted" | "completed" | "declined";
+  campaignId?: string;
+  workItemId?: string;
+  threadId?: string;
   createdAt: string;
 };
 
@@ -119,6 +147,15 @@ export type WorkItem = {
   color: string;
   due: string;
   bucket: "active" | "applications" | "completed";
+  campaignId?: string;
+  bookingId?: string;
+  brandUserId?: string;
+  mode?: "instant" | "schedule";
+  needsAccept?: boolean;
+  threadId?: string;
+  pay?: string;
+  location?: string;
+  brief?: string;
 };
 
 export type AppPersistedState = {

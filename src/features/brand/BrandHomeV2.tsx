@@ -71,9 +71,15 @@ export function BrandHomeV2({
     api
       .listCampaigns({})
       .then((data) => {
-        setCampaigns(data.campaigns || []);
+        setCampaigns((data.campaigns || []) as BrandCampaign[]);
         setBookings(data.bookings || []);
-        if (data.counts) setCounts(data.counts);
+        if (data.counts) {
+          setCounts({
+            active: data.counts.active || 0,
+            applications: data.counts.applications || 0,
+            completed: data.counts.completed || 0,
+          });
+        }
       })
       .catch(() => {});
     api
