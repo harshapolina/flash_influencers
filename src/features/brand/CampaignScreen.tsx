@@ -1,59 +1,78 @@
 import { useEffect, useState } from "react";
-import { formatInr } from "../../data";
+import { creators } from "../../data";
 import { api } from "../../lib/api";
 import { Icon } from "../../lib/icons";
 import { useAppStore } from "../../store/AppStore";
 import { StatusBar } from "../../components/ui/StatusBar";
-import type { BrandCampaign, Booking } from "../../types";
+import type { AppFlow, Booking } from "../../types";
 
-type CampaignTab = "active" | "applications" | "completed";
+export function CampaignScreen({
+  onOpen,
+  onOpenFlow,
+  campaignPublished = false,
+  paymentComplete = false,
+}: {
+  onOpen?: (flow: AppFlow) => void;
+  onOpenFlow?: (flow: AppFlow) => void;
+  campaignPublished?: boolean;
+  paymentComplete?: boolean;
+  onOpenExplore?: () => void;
+  initialTab?: "active" | "applications" | "completed";
+}) {
+  const open = onOpen || onOpenFlow;
+  const { issueBookingStartOtp, updateBookingStatus, refreshBookings } = useAppStore();
 
-export function CampaignScreen({ onOpenExplore }: { onOpenExplore?: () => void }) {
-  const { state } = useAppStore();
-  const [tab, setTab] = useState<CampaignTab>("active");
-  const [campaigns, setCampaigns] = useState<BrandCampaign[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>(state.bookings);
-  const [counts, setCounts] = useState({ active: 0, applications: 0, completed: 0 });
+  const [activeTab, setActiveTab] = useState<"Active" | "Applications" | "Completed">("Active");
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [otpById, setOtpById] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const load = async () => {
+    try {
+      const data = await api.listBookings();
+      setBookings(data.bookings || []);
+    } catch {
+      setBookings([]);
+    }
+  };
 
   useEffect(() => {
-    let alive = true;
-    api
-      .listCampaigns({ status: tab })
-      .then((data) => {
-        if (!alive) return;
-        setCampaigns((data.campaigns || []) as BrandCampaign[]);
-        setBookings(data.bookings || state.bookings);
-        setCounts({
-          active: data.counts?.active || 0,
-          applications: data.counts?.applications || 0,
-          completed: data.counts?.completed || 0,
-        });
-      })
-      .catch(() => {
-        setBookings(state.bookings);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [tab, state.bookings]);
+    void load();
+  }, [activeTab]);
 
-  const list =
-    tab === "applications"
-      ? [
-          ...campaigns.filter((c) => c.status === "applications"),
-          ...bookings.map((b) => ({
-            id: b.id,
-            title: `${b.deliverable} booking`,
-            brand: `Creator #${b.creatorId}`,
-            status: "applications" as const,
-            progress: 15,
-            creatorsConfirmed: `Pending · ${b.date}`,
-            due: b.date,
-            deliverables: b.deliverable,
-            needsAttention: `Booking ${b.id}`,
-          })),
-        ]
-      : campaigns.filter((c) => c.status === tab);
+  const pending = bookings.filter((b) => b.status === "pending");
+  const live = bookings.filter((b) => b.status === "accepted" || b.status === "in_progress");
+  const done = bookings.filter((b) => b.status === "completed");
+
+  const generateOtp = async (id: string) => {
+    setBusyId(id);
+    setError("");
+    try {
+      const data = await issueBookingStartOtp(id);
+      setOtpById((m) => ({ ...m, [id]: data.code }));
+      await refreshBookings();
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate OTP");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const completeBooking = async (id: string) => {
+    setBusyId(id);
+    setError("");
+    try {
+      await updateBookingStatus(id, "completed");
+      await refreshBookings();
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not complete booking");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <div className="screen simple-screen">
@@ -63,129 +82,237 @@ export function CampaignScreen({ onOpenExplore }: { onOpenExplore?: () => void }
           <small>YOUR WORK</small>
           <h1>Campaigns</h1>
         </div>
-        <button className="round-button dark" type="button" onClick={onOpenExplore}>
+        <button
+          className="round-button dark"
+          onClick={() => open?.({ name: "campaign-create", role: "brand" })}
+          aria-label="Create campaign"
+        >
           <Icon name="plus" />
         </button>
       </header>
       <div className="campaign-tabs">
-        {(
-          [
-            ["active", "Active", counts.active],
-            ["applications", "Applications", counts.applications],
-            ["completed", "Completed", counts.completed],
-          ] as const
-        ).map(([id, label, count]) => (
+        {(["Active", "Applications", "Completed"] as const).map((tab) => (
           <button
-            key={id}
-            type="button"
-            className={tab === id ? "active" : ""}
-            onClick={() => setTab(id)}
+            className={activeTab === tab ? "active" : ""}
+            onClick={() => setActiveTab(tab)}
+            key={tab}
           >
-            {label} <span>{count}</span>
+            {tab}
+            {tab === "Active" && <span>{(campaignPublished ? 5 : 4) + live.length}</span>}
+            {tab === "Applications" && pending.length > 0 && <span>{pending.length}</span>}
           </button>
         ))}
       </div>
-
-      {list[0] && tab === "active" && (
-        <div className="active-campaign">
-          <div className="campaign-cover">
-            <div>
-              <span>{list[0].brand.toUpperCase()}</span>
-              <h2>
-                Summer
-                <br />
-                in colour.
-              </h2>
+      {error ? <p className="booking-error">{error}</p> : null}
+      {activeTab === "Active" && (
+        <>
+          <div className="active-campaign">
+            <div className="campaign-cover">
+              <div>
+                <span>THE LOOM</span>
+                <h2>
+                  Summer
+                  <br />
+                  in colour.
+                </h2>
+              </div>
+              <span className="status-chip">IN PROGRESS</span>
             </div>
-            <span className="status-chip">IN PROGRESS</span>
+            <div className="campaign-body">
+              <div>
+                <strong>Summer Edit 2025</strong>
+                <span>6 of 8 creators confirmed</span>
+              </div>
+              <button
+                onClick={() => open?.({ name: "brand-campaign", role: "brand" })}
+                aria-label="Open campaign"
+              >
+                <Icon name="chevron" size={16} />
+              </button>
+              <div className="progress">
+                <span style={{ width: "72%" }} />
+              </div>
+              <footer>
+                <span>
+                  <Icon name="calendar" size={14} /> Due 28 Jun
+                </span>
+                <span>
+                  <Icon name="camera" size={14} /> 12 deliverables
+                </span>
+              </footer>
+            </div>
           </div>
-          <div className="campaign-body">
-            <div>
-              <strong>{list[0].title}</strong>
-              <span>{list[0].creatorsConfirmed}</span>
-            </div>
-            <button type="button">
-              <Icon name="chevron" size={16} />
-            </button>
-            <div className="progress">
-              <span style={{ width: `${list[0].progress}%` }} />
-            </div>
-            <footer>
-              <span>
-                <Icon name="calendar" size={14} /> Due {list[0].due}
-              </span>
-              <span>
-                <Icon name="camera" size={14} /> {list[0].deliverables}
-              </span>
-            </footer>
-          </div>
-        </div>
-      )}
-
-      {tab !== "active" && (
-        <div className="task-list" style={{ marginTop: 8 }}>
-          {list.map((item) => (
-            <div key={item.id}>
+          {live.length > 0 && (
+            <>
+              <h3 className="small-title">Live bookings</h3>
+              <div className="flow-inline-list">
+                {live.map((booking) => (
+                  <div className="flow-inline-card" key={booking.id} style={{ display: "block" }}>
+                    <p>
+                      <small>
+                        {booking.bookingType === "instant" ? "INSTANT" : "SCHEDULED"} ·{" "}
+                        {booking.status === "in_progress" ? "IN PROGRESS" : "ACCEPTED"}
+                      </small>
+                      <strong>
+                        {booking.creatorName || "Creator"} · {booking.deliverable}
+                      </strong>
+                      <span>
+                        #{booking.id} · {booking.date}
+                        {booking.time ? ` · ${booking.time}` : ""}
+                      </span>
+                    </p>
+                    {booking.status === "accepted" && (
+                      <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          className="apply-button"
+                          disabled={busyId === booking.id}
+                          onClick={() => void generateOtp(booking.id)}
+                        >
+                          {busyId === booking.id ? "Generating…" : "Generate start OTP"}
+                        </button>
+                        {otpById[booking.id] && (
+                          <strong style={{ alignSelf: "center", letterSpacing: 2 }}>
+                            OTP {otpById[booking.id]}
+                          </strong>
+                        )}
+                      </div>
+                    )}
+                    {booking.status === "in_progress" && (
+                      <button
+                        type="button"
+                        className="apply-button"
+                        style={{ marginTop: 8 }}
+                        disabled={busyId === booking.id}
+                        onClick={() => void completeBooking(booking.id)}
+                      >
+                        {busyId === booking.id ? "Completing…" : "Mark complete"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <h3 className="small-title">Needs attention</h3>
+          <div className="task-list">
+            <button onClick={() => open?.({ name: "submissions", role: "brand" })}>
               <span className="task-icon">
-                <Icon name="briefcase" />
+                <Icon name="camera" />
               </span>
               <p>
-                <strong>{item.title}</strong>
-                <small>
-                  {item.brand} · {item.creatorsConfirmed}
-                </small>
+                <strong>3 submissions to review</strong>
+                <small>Summer Edit 2025</small>
               </p>
               <Icon name="chevron" />
-            </div>
-          ))}
-          {!list.length && (
-            <div>
+            </button>
+            <button onClick={() => open?.({ name: "applications", role: "brand" })}>
               <span className="task-icon yellow">
                 <Icon name="clock" />
               </span>
               <p>
-                <strong>Nothing here yet</strong>
-                <small>Book a creator to see activity</small>
+                <strong>2 responses expiring soon</strong>
+                <small>Monsoon Stories</small>
               </p>
-            </div>
+              <Icon name="chevron" />
+            </button>
+          </div>
+          {campaignPublished && (
+            <button
+              className="flow-inline-card campaign-added-card"
+              onClick={() =>
+                open?.({ name: "brand-campaign", role: "brand", title: "New campaign" })
+              }
+            >
+              <span className="flow-brand-mark">TL</span>
+              <p>
+                <small>JUST PUBLISHED</small>
+                <strong>New creator campaign</strong>
+                <span>Recruiting creators now</span>
+              </p>
+              <Icon name="chevron" size={14} />
+            </button>
           )}
-        </div>
+          {paymentComplete && (
+            <p className="campaign-paid-note">
+              <Icon name="check" size={12} /> Latest creator payment completed
+            </p>
+          )}
+        </>
       )}
-
-      {tab === "active" && (
-        <>
-          <h3 className="small-title">Needs attention</h3>
-          <div className="task-list">
-            {campaigns
-              .filter((c) => c.needsAttention)
-              .map((c, i) => (
-                <div key={c.id}>
-                  <span className={`task-icon ${i ? "yellow" : ""}`}>
-                    <Icon name={i ? "clock" : "camera"} />
+      {activeTab === "Applications" && (
+        <div className="flow-inline-list">
+          {pending.length > 0
+            ? pending.map((booking) => (
+                <div className="flow-inline-card" key={booking.id}>
+                  <span className="flow-brand-mark">
+                    {(booking.creatorName || "CR").slice(0, 2).toUpperCase()}
                   </span>
                   <p>
-                    <strong>{c.needsAttention}</strong>
-                    <small>{c.title}</small>
+                    <small>PENDING · {booking.bookingType === "instant" ? "INSTANT" : "SCHEDULED"}</small>
+                    <strong>
+                      {booking.creatorName || "Creator"} · {booking.deliverable}
+                    </strong>
+                    <span>
+                      #{booking.id} · {booking.date}
+                    </span>
                   </p>
-                  <Icon name="chevron" />
                 </div>
+              ))
+            : creators.slice(0, 3).map((creator) => (
+                <button
+                  className="flow-inline-card"
+                  onClick={() =>
+                    open?.({ name: "applications", role: "brand", context: creator.name })
+                  }
+                  key={creator.id}
+                >
+                  <img src={creator.image} alt={creator.name} />
+                  <p>
+                    <small>{creator.match}% MATCH</small>
+                    <strong>{creator.name}</strong>
+                    <span>
+                      {creator.niche} · {creator.price}
+                    </span>
+                  </p>
+                  <Icon name="chevron" size={14} />
+                </button>
               ))}
-            {bookings.slice(0, 3).map((b) => (
-              <div key={b.id}>
-                <span className="task-icon">
-                  <Icon name="message" />
-                </span>
-                <p>
-                  <strong>Awaiting response · #{b.id}</strong>
-                  <small>
-                    {b.deliverable} · {formatInr(b.price)}
-                  </small>
-                </p>
-                <Icon name="chevron" />
-              </div>
-            ))}
-          </div>
-        </>
+        </div>
+      )}
+      {activeTab === "Completed" && (
+        <div className="flow-inline-list">
+          {done.length > 0
+            ? done.map((booking) => (
+                <div className="flow-inline-card" key={booking.id}>
+                  <span className="flow-brand-mark">
+                    {(booking.creatorName || "OK").slice(0, 2).toUpperCase()}
+                  </span>
+                  <p>
+                    <small>COMPLETED</small>
+                    <strong>
+                      {booking.creatorName || "Creator"} · {booking.deliverable}
+                    </strong>
+                    <span>#{booking.id}</span>
+                  </p>
+                </div>
+              ))
+            : ["Festive Stories", "Winter Essentials"].map((title, index) => (
+                <button
+                  className="flow-inline-card"
+                  onClick={() => open?.({ name: "brand-analytics", role: "brand", title })}
+                  key={title}
+                >
+                  <span className="flow-brand-mark">{index ? "WE" : "FS"}</span>
+                  <p>
+                    <small>COMPLETED</small>
+                    <strong>{title}</strong>
+                    <span>{index ? "2.4M reach" : "3.8M reach"} · View report</span>
+                  </p>
+                  <Icon name="chevron" size={14} />
+                </button>
+              ))}
+        </div>
       )}
     </div>
   );

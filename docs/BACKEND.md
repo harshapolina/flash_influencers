@@ -55,7 +55,9 @@ App: `http://localhost:5173` (proxies `/api` → API)
 | POST | `/api/creators/:id/like` | Like/unlike |
 | GET | `/api/campaigns` | Brand board / creator opportunities |
 | POST | `/api/campaigns/:id/apply` | Creator apply |
-| POST | `/api/bookings` | Brand booking request |
+| GET | `/api/bookings` | Brand/creator booking list (role-aware) |
+| POST | `/api/bookings` | Brand booking request (`instant` or `scheduled`) |
+| PATCH | `/api/bookings/:id` | Creator accept/reject · Brand complete |
 | GET | `/api/messages` | Inbox |
 | POST | `/api/messages/:id/read` | Mark message read |
 | GET/POST | `/api/earnings` / `withdraw` | Creator earnings |

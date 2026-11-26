@@ -1,7 +1,7 @@
 import type {
   Booking,
   Campaign,
-  ChatMessage,
+  ChatLine,
   CreatorProfile,
   Message,
   OtpRecord,
@@ -13,7 +13,7 @@ import type {
 import {
   BookingModel,
   CampaignModel,
-  ChatMessageModel,
+  ChatLineModel,
   CreatorModel,
   lean,
   MessageModel,
@@ -51,11 +51,7 @@ export const store = {
   },
 
   async updateUser(id: string, patch: Partial<User>) {
-    const doc = await UserModel.findOneAndUpdate(
-      { id },
-      { $set: patch },
-      { returnDocument: "after" },
-    ).lean();
+    const doc = await UserModel.findOneAndUpdate({ id }, { $set: patch }, { new: true }).lean();
     return lean<User | null>(doc);
   },
 
@@ -95,9 +91,56 @@ export const store = {
     const doc = await CreatorModel.findOneAndUpdate(
       { id: creatorId },
       { $set: { userId } },
-      { returnDocument: "after" },
+      { new: true },
     ).lean();
     return lean<CreatorProfile | null>(doc);
+  },
+
+  async upsertCreatorProfile(creator: CreatorProfile) {
+    const doc = await CreatorModel.findOneAndUpdate(
+      { id: creator.id },
+      { $set: creator },
+      { upsert: true, new: true },
+    ).lean();
+    return lean<CreatorProfile>(doc);
+  },
+
+  async updateCreatorAvailability(
+    userId: string,
+    patch: {
+      available?: boolean;
+      sameDay?: boolean;
+      leadTime?: string;
+      workingDays?: number[];
+      startTime?: string;
+      endTime?: string;
+    },
+  ) {
+    const existing = await this.findCreatorByUserId(userId);
+    if (!existing) return null;
+    const availability = {
+      workingDays: patch.workingDays ?? existing.availability?.workingDays ?? [1, 2, 3, 4, 5],
+      startTime: patch.startTime ?? existing.availability?.startTime ?? "09:00",
+      endTime: patch.endTime ?? existing.availability?.endTime ?? "18:00",
+      leadTime: patch.leadTime ?? existing.availability?.leadTime ?? "3 days",
+      sameDay:
+        typeof patch.sameDay === "boolean"
+          ? patch.sameDay
+          : (existing.availability?.sameDay ?? false),
+    };
+    const available =
+      typeof patch.available === "boolean" ? patch.available : existing.available;
+    const doc = await CreatorModel.findOneAndUpdate(
+      { id: existing.id },
+      { $set: { available, availability } },
+      { new: true },
+    ).lean();
+    return lean<CreatorProfile | null>(doc);
+  },
+
+  async nextCreatorId() {
+    const last = await CreatorModel.findOne().sort({ id: -1 }).lean();
+    return (last?.id || 100) + 1;
   },
 
   async listCampaigns() {
@@ -113,28 +156,11 @@ export const store = {
     return campaign;
   },
 
-  async updateCampaign(id: string, patch: Partial<Campaign>) {
-    const doc = await CampaignModel.findOneAndUpdate(
-      { id },
-      { $set: patch },
-      { returnDocument: "after" },
-    ).lean();
-    return lean<Campaign | null>(doc);
-  },
-
-  async listBookings(brandUserId?: string) {
-    const filter = brandUserId ? { brandUserId } : {};
-    return (await BookingModel.find(filter).sort({ createdAt: -1 }).lean()).map((b) =>
-      lean<Booking>(b),
-    );
-  },
-
-  async listBookingsForCreator(creatorUserId: string, creatorId?: number) {
-    const filter =
-      creatorId != null
-        ? { $or: [{ creatorUserId }, { creatorId }] }
-        : { creatorUserId };
-    return (await BookingModel.find(filter).sort({ createdAt: -1 }).lean()).map((b) =>
+  async listBookings(filter: { brandUserId?: string; creatorId?: number } = {}) {
+    const query: Record<string, unknown> = {};
+    if (filter.brandUserId) query.brandUserId = filter.brandUserId;
+    if (typeof filter.creatorId === "number") query.creatorId = filter.creatorId;
+    return (await BookingModel.find(query).sort({ createdAt: -1 }).lean()).map((b) =>
       lean<Booking>(b),
     );
   },
@@ -149,11 +175,16 @@ export const store = {
   },
 
   async updateBooking(id: string, patch: Partial<Booking>) {
-    const doc = await BookingModel.findOneAndUpdate(
-      { id },
-      { $set: patch },
-      { returnDocument: "after" },
-    ).lean();
+    const $set: Record<string, unknown> = {};
+    const $unset: Record<string, 1> = {};
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) $unset[key] = 1;
+      else $set[key] = value;
+    }
+    const update: Record<string, unknown> = {};
+    if (Object.keys($set).length) update.$set = $set;
+    if (Object.keys($unset).length) update.$unset = $unset;
+    const doc = await BookingModel.findOneAndUpdate({ id }, update, { new: true }).lean();
     return lean<Booking | null>(doc);
   },
 
@@ -165,10 +196,15 @@ export const store = {
     ).map((m) => lean<Message>(m));
   },
 
-  async findMessageByThread(userId: string, threadId: string) {
-    return lean<Message | null>(
-      await MessageModel.findOne({ userId, threadId }).lean(),
+  async listChatLines(threadKey: string) {
+    return (await ChatLineModel.find({ threadKey }).sort({ createdAt: 1 }).lean()).map((line) =>
+      lean<ChatLine>(line),
     );
+  },
+
+  async createChatLine(line: ChatLine) {
+    await ChatLineModel.create(line);
+    return line;
   },
 
   async createMessage(message: Message) {
@@ -176,13 +212,44 @@ export const store = {
     return message;
   },
 
-  async updateMessage(id: string, patch: Partial<Message>) {
-    const doc = await MessageModel.findOneAndUpdate(
-      { id },
-      { $set: patch },
-      { returnDocument: "after" },
-    ).lean();
-    return lean<Message | null>(doc);
+  async upsertInboxPreview(input: {
+    userId: string;
+    peerCreatorId: number;
+    preview: string;
+    campaign?: string;
+    unread?: number;
+    category?: "campaigns" | "general";
+  }) {
+    const existing = (await MessageModel.findOne({
+      userId: input.userId,
+      peerCreatorId: input.peerCreatorId,
+    })
+      .sort({ _id: -1 })
+      .lean()) as Message | null;
+    if (existing) {
+      await MessageModel.updateOne(
+        { id: existing.id },
+        {
+          $set: {
+            preview: input.preview,
+            time: "now",
+            unread: input.unread ?? existing.unread,
+            campaign: input.campaign || existing.campaign,
+          },
+        },
+      );
+      return;
+    }
+    await MessageModel.create({
+      id: `msg-${Date.now()}`,
+      userId: input.userId,
+      peerCreatorId: input.peerCreatorId,
+      preview: input.preview,
+      campaign: input.campaign || "Direct message",
+      time: "now",
+      unread: input.unread ?? 0,
+      category: input.category || "general",
+    });
   },
 
   async markMessageRead(id: string, userId: string) {
@@ -196,27 +263,8 @@ export const store = {
     await MessageModel.updateMany({ userId: "system" }, { $set: { userId } });
   },
 
-  async listChatMessages(threadId: string) {
-    return (
-      await ChatMessageModel.find({ threadId }).sort({ createdAt: 1 }).lean()
-    ).map((m) => lean<ChatMessage>(m));
-  },
-
-  async createChatMessage(message: ChatMessage) {
-    await ChatMessageModel.create(message);
-    return message;
-  },
-
   async listWorkItems(creatorUserId: string) {
     return (await WorkItemModel.find({ creatorUserId }).lean()).map((w) => lean<WorkItem>(w));
-  },
-
-  async findWorkItem(id: string) {
-    return lean<WorkItem | null>(await WorkItemModel.findOne({ id }).lean());
-  },
-
-  async findWorkByBooking(bookingId: string) {
-    return lean<WorkItem | null>(await WorkItemModel.findOne({ bookingId }).lean());
   },
 
   async createWorkItem(item: WorkItem) {
@@ -225,11 +273,7 @@ export const store = {
   },
 
   async updateWorkItem(id: string, patch: Partial<WorkItem>) {
-    const doc = await WorkItemModel.findOneAndUpdate(
-      { id },
-      { $set: patch },
-      { returnDocument: "after" },
-    ).lean();
+    const doc = await WorkItemModel.findOneAndUpdate({ id }, { $set: patch }, { new: true }).lean();
     return lean<WorkItem | null>(doc);
   },
 
@@ -275,11 +319,10 @@ export const store = {
   },
 
   async updatePrefs(userId: string, patch: Partial<UserPrefs>) {
-    await this.ensurePrefs(userId);
     const prefs = await PrefsModel.findOneAndUpdate(
       { userId },
-      { $set: patch },
-      { returnDocument: "after" },
+      { $set: patch, $setOnInsert: emptyPrefs(userId) },
+      { upsert: true, new: true },
     ).lean();
     return lean<UserPrefs>(prefs);
   },
@@ -313,6 +356,22 @@ export const store = {
     if (data.workItems.length) await WorkItemModel.insertMany(data.workItems);
     if (data.transactions.length) await TransactionModel.insertMany(data.transactions);
     return true;
+  },
+
+  async syncCreatorAvailability(creators: CreatorProfile[]) {
+    let updated = 0;
+    for (const creator of creators) {
+      if (!creator.availability) continue;
+      const result = await CreatorModel.updateOne(
+        {
+          id: creator.id,
+          $or: [{ availability: { $exists: false } }, { availability: null }],
+        },
+        { $set: { availability: creator.availability } },
+      );
+      updated += result.modifiedCount || 0;
+    }
+    return updated;
   },
 
   async replaceSeed(data: {

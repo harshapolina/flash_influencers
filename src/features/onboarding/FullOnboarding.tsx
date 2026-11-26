@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { brandSteps, creatorSteps, creators } from "../../data";
 import { api, setToken, type PlaceResult, type SocialAccount } from "../../lib/api";
 import { requestGoogleIdToken } from "../../lib/googleAuth";
@@ -10,13 +10,17 @@ import { SocialConnect } from "./SocialConnect";
 
 export function FullOnboarding({
   onFinish,
+  initialPhase = "common",
+  initialRole = "brand",
 }: {
   onFinish: (role: OnboardingRole) => void | Promise<void>;
+  initialPhase?: "common" | "role" | "login";
+  initialRole?: OnboardingRole;
 }) {
-  const { setUser, login, googleLogin } = useAppStore();
-  const [phase, setPhase] = useState<"common" | "role" | "login">("common");
+  const { setUser, login, googleLogin, demoEnter } = useAppStore();
+  const [phase, setPhase] = useState<"common" | "role" | "login">(initialPhase);
   const [step, setStep] = useState(0);
-  const [role, setRole] = useState<OnboardingRole>("brand");
+  const [role, setRole] = useState<OnboardingRole>(initialRole);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [fields, setFields] = useState<Record<string, string>>({});
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -518,11 +522,39 @@ export function FullOnboarding({
               Already have an account? <b>Log in</b>
             </button>
             <div className="intro-demo-row">
-              <button type="button" className="flow-skip" disabled={busy} onClick={() => openLogin("brand")}>
-                Brand login
+              <button
+                type="button"
+                className="flow-skip"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    await demoEnter("brand");
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Demo login failed");
+                    setBusy(false);
+                  }
+                }}
+              >
+                Brand demo
               </button>
-              <button type="button" className="flow-skip" disabled={busy} onClick={() => openLogin("creator")}>
-                Creator login
+              <button
+                type="button"
+                className="flow-skip"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    await demoEnter("creator");
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Demo login failed");
+                    setBusy(false);
+                  }
+                }}
+              >
+                Creator demo
               </button>
             </div>
           </div>
@@ -783,7 +815,7 @@ export function FullOnboarding({
         ) : isAI ? (
           <AIAnalysis role={role} />
         ) : isReview ? (
-          <ReviewProfile />
+          <ReviewProfile role={role} fields={fields} answers={answers} />
         ) : (
           <OnboardingFields
             role={role}
@@ -1688,9 +1720,76 @@ function FaceVerification({
   onSkip: () => void;
 }) {
   const [stage, setStage] = useState<"intro" | "camera" | "processing" | "verified">("intro");
+  const [cameraError, setCameraError] = useState("");
+  const [capturedUrl, setCapturedUrl] = useState("");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  };
+
+  useEffect(() => () => stopCamera(), []);
+
+  useEffect(() => {
+    if (stage !== "camera") return;
+    let cancelled = false;
+    setCameraError("");
+    navigator.mediaDevices
+      ?.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 960 } },
+        audio: false,
+      })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          void videoRef.current.play().catch(() => {});
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCameraError("Camera permission is required. Allow access or skip for now.");
+        }
+      });
+    return () => {
+      cancelled = true;
+      stopCamera();
+    };
+  }, [stage]);
+
   const startProcessing = () => {
+    const video = videoRef.current;
+    if (video && video.videoWidth > 0) {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(video, 0, 0);
+      setCapturedUrl(canvas.toDataURL("image/jpeg", 0.86));
+    }
+    stopCamera();
     setStage("processing");
-    window.setTimeout(() => setStage("verified"), 1900);
+    window.setTimeout(() => {
+      setStage("verified");
+      void api
+        .saveOnboardingProgress({
+          profile: {
+            faceVerification: {
+              status: "selfie_captured",
+              capturedAt: new Date().toISOString(),
+              provider: "device-camera",
+              note: "Liveness provider not configured — selfie captured for review",
+            },
+          },
+        })
+        .catch(() => {});
+    }, 1900);
   };
 
   if (stage === "intro") {
@@ -1772,7 +1871,7 @@ function FaceVerification({
     return (
       <div className="face-verification face-camera">
         <div className="camera-preview">
-          <img src={creators[0].image} alt="Live camera preview" />
+          <video ref={videoRef} autoPlay playsInline muted className="camera-video" aria-label="Live camera preview" />
           <div className="camera-vignette" />
           <div className="face-guide">
             {Array.from({ length: 10 }).map((_, index) => (
@@ -1781,14 +1880,14 @@ function FaceVerification({
             <span className="live-scan-line" />
           </div>
           <span className="camera-status">
-            <i /> CAMERA LIVE
+            <i /> {cameraError ? "CAMERA BLOCKED" : "CAMERA LIVE"}
           </span>
           <span className="camera-secure">
             <Icon name="shield" size={12} /> Encrypted
           </span>
           <div className="pose-instruction">
-            <strong>Position your face in the oval</strong>
-            <small>Look straight ahead and keep still</small>
+            <strong>{cameraError ? "Camera access needed" : "Position your face in the oval"}</strong>
+            <small>{cameraError || "Look straight ahead and keep still"}</small>
           </div>
         </div>
         <div className="capture-guides">
@@ -1802,13 +1901,13 @@ function FaceVerification({
             <Icon name="camera" size={11} /> No glasses
           </span>
         </div>
-        <button className="capture-button" onClick={startProcessing}>
+        <button className="capture-button" onClick={startProcessing} disabled={Boolean(cameraError)}>
           <span>
             <i />
           </span>
           Capture & verify
         </button>
-        <button className="face-back-action" onClick={() => setStage("intro")}>
+        <button className="face-back-action" onClick={() => { stopCamera(); setStage("intro"); }}>
           Not ready? Go back
         </button>
       </div>
@@ -1821,7 +1920,7 @@ function FaceVerification({
         <div className="processing-face">
           <div className="processing-ring pr-one" />
           <div className="processing-ring pr-two" />
-          <img src={creators[0].image} alt="Captured face" />
+          <img src={capturedUrl || creators[0].image} alt="Captured face" />
           <span className="processing-scan" />
           {Array.from({ length: 8 }).map((_, index) => (
             <i className={`process-point pp-${index + 1}`} key={index} />
@@ -1870,7 +1969,7 @@ function FaceVerification({
       <div className="verified-face-scene">
         <div className="verified-burst vb-one" />
         <div className="verified-burst vb-two" />
-        <img src={creators[0].image} alt="Verified profile" />
+        <img src={capturedUrl || creators[0].image} alt="Verified profile" />
         <span className="face-verified-check">
           <Icon name="check" size={23} />
         </span>
@@ -1882,7 +1981,7 @@ function FaceVerification({
         <Icon name="shield" size={12} /> FACE VERIFIED
       </span>
       <h3>Identity confirmed</h3>
-      <p>Your liveness check passed and your face was successfully matched.</p>
+      <p>Your selfie was captured and saved for review. Full liveness matching unlocks when a provider is configured.</p>
       <div className="verification-score">
         <div>
           <strong>98.6%</strong>
@@ -2533,17 +2632,43 @@ function AIAnalysis({ role }: { role: OnboardingRole }) {
   );
 }
 
-function ReviewProfile() {
+function ReviewProfile({
+  role,
+  fields,
+  answers,
+}: {
+  role: OnboardingRole;
+  fields: Record<string, string>;
+  answers: Record<string, string[]>;
+}) {
+  const pick = (...keys: string[]) => {
+    for (const key of keys) {
+      if (fields[key]?.trim()) return fields[key].trim();
+      if (answers[key]?.length) return answers[key].join(", ");
+    }
+    return "Not set yet";
+  };
+  const rows =
+    role === "brand"
+      ? [
+          ["Business", pick("Business Information:BUSINESS NAME", "Business Information:BRAND NAME", "Business Details:INDUSTRY")],
+          ["Goals", pick("Marketing Goals", "Campaign Requirements")],
+          ["Creator preferences", pick("Creator Type Preferences", "Influencer Categories")],
+          ["Markets", pick("Target Locations", "Preferred Languages")],
+          ["Budget", pick("Marketing Budget", "Number of Creators")],
+        ]
+      : [
+          ["Profile", pick("Personal Information:DISPLAY NAME", "Personal Information:LEGAL NAME")],
+          ["Location", pick("Location Details:LOCATION", "Location Details:CITY")],
+          ["Categories", pick("Creator Category", "Content Categories")],
+          ["Pricing", pick("Pricing Preferences:AMOUNT", "Pricing Preferences")],
+          ["Availability", fields["Availability:SCHEDULE"] ? "Schedule saved" : "Not set yet"],
+        ];
+
   return (
     <div className="review-sections">
-      {[
-        ["Business", "The Loom · D2C fashion"],
-        ["Goals", "Awareness, sales, UGC"],
-        ["Creator preferences", "Micro and mid-tier creators"],
-        ["Markets", "Mumbai, Delhi NCR, Bengaluru"],
-        ["Budget", "₹50K – ₹1L per campaign"],
-      ].map(([label, value]) => (
-        <button key={label}>
+      {rows.map(([label, value]) => (
+        <button key={label} type="button">
           <span>
             <small>{label}</small>
             <strong>{value}</strong>

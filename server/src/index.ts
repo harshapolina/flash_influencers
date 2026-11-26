@@ -44,8 +44,11 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 async function start() {
   await connectMongo();
-  const seeded = await store.seedIfEmpty(buildSeed());
+  const seed = buildSeed();
+  const seeded = await store.seedIfEmpty(seed);
   if (seeded) console.log("MongoDB seeded with demo creators & campaigns");
+  const synced = await store.syncCreatorAvailability(seed.creators);
+  if (synced) console.log(`Synced availability prefs for ${synced} creators`);
 
   app.listen(config.port, () => {
     console.log(`Orbitly API listening on http://localhost:${config.port}`);

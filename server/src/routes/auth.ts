@@ -284,7 +284,7 @@ authRouter.post("/demo-login", async (req, res) => {
     if (!user) return fail(res, new Error("Unable to create demo user"), 500);
 
     // Demo creator Aarohi ↔ catalog creator id 1 so brand bookings reach this account
-    if (user.role === "creator") {
+    if (user.role === "creator" || body.role === "creator") {
       await store.linkCreatorUser(1, user.id);
     }
 

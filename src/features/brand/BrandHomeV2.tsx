@@ -1,94 +1,69 @@
-import { useEffect, useState } from "react";
-import { api } from "../../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { creators as fallbackCreators } from "../../data";
 import { Icon } from "../../lib/icons";
-import type { Booking, BrandCampaign, Creator, IconName, InboxMessage } from "../../types";
 import { StatusBar } from "../../components/ui/StatusBar";
 import { SectionTitle } from "../../components/ui/SectionTitle";
 import { useAppStore } from "../../store/AppStore";
-
-function inrCompact(n: number) {
-  if (n >= 100000) return `₹${(n / 100000).toFixed(1).replace(/\.0$/, "")}L`;
-  if (n >= 1000) return `₹${Math.round(n / 1000)}K`;
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
-}
-
-function parseCount(value: string) {
-  const n = Number(String(value).replace(/[^\d.]/g, ""));
-  if (!n) return 0;
-  if (/m/i.test(value)) return n * 1_000_000;
-  if (/k/i.test(value)) return n * 1_000;
-  return n;
-}
-
-function compactCount(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
-  return String(Math.round(n));
-}
-
-function initials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() || "")
-    .join("");
-}
+import type { AppFlow, Creator, IconName } from "../../types";
+import { InstantCreatorDeck } from "./discovery/InstantCreatorDeck";
+import { CreatorSearchPreferences } from "./discovery/CreatorSearchPreferences";
+import { CreatorMatchLoader } from "./discovery/CreatorMatchLoader";
 
 export function BrandHomeV2({
   onExplore,
+  onCampaigns,
+  onProfile,
+  onInbox,
   onCreator,
+  onOpen,
+  onBookInstant,
 }: {
   onExplore: () => void;
+  onCampaigns?: () => void;
+  onProfile?: () => void;
+  onInbox?: () => void;
   onCreator: (creator: Creator) => void;
+  onOpen?: (flow: AppFlow) => void;
+  onOpenFlow?: (flow: AppFlow) => void;
+  onBookInstant?: (creator: Creator) => void;
 }) {
-  const { state, toggleLike, refreshCreators } = useAppStore();
+  const openFlow = onOpen;
+  const { state, setFilters, refreshCreators } = useAppStore();
+
+  const [saved, setSaved] = useState<number[]>([2]);
   const [prompt, setPrompt] = useState("");
-  const [campaigns, setCampaigns] = useState<BrandCampaign[]>([]);
-  const [counts, setCounts] = useState({ active: 0, applications: 0, completed: 0 });
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [messages, setMessages] = useState<InboxMessage[]>([]);
-  const saved = state.likedIds;
-  const toggleSave = toggleLike;
-  const creators = state.creatorsCache;
-  const userName = state.user?.name || "there";
-  const firstName = userName.split(" ")[0];
-  const workspace =
-    (typeof state.user?.profile.company === "string" && state.user.profile.company) ||
-    (typeof state.user?.profile.brandName === "string" && state.user.profile.brandName) ||
-    userName;
-  const featured = campaigns.find((c) => c.status === "active") || campaigns[0];
-  const spend = bookings.reduce((sum, booking) => sum + (booking.price || 0), 0);
-  const pending = bookings.filter((booking) => booking.status === "pending").length;
-  const reach = creators.reduce((sum, creator) => sum + parseCount(creator.views), 0);
-  const engagement = creators.reduce((sum, creator) => sum + parseCount(creator.engagement), 0);
-  const recommended = [...creators].sort((a, b) => b.match - a.match).slice(0, 3);
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const [searchMode, setSearchMode] = useState<"instant" | "schedule">("instant");
+  const [scheduledDay, setScheduledDay] = useState("Tomorrow");
+  const [matchStage, setMatchStage] = useState<number | null>(null);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [instantDeckOpen, setInstantDeckOpen] = useState(false);
+  const toggleSave = (id: number) =>
+    setSaved((items) =>
+      items.includes(id) ? items.filter((item) => item !== id) : [...items, id],
+    );
+
+  const creators = useMemo(() => {
+    const live = state.creatorsCache.length ? state.creatorsCache : fallbackCreators;
+    if (searchMode === "instant") {
+      return live.filter((c) => c.available && (c.availability?.sameDay ?? true));
+    }
+    return live;
+  }, [state.creatorsCache, searchMode]);
 
   useEffect(() => {
-    void refreshCreators("");
-    api
-      .listCampaigns({})
-      .then((data) => {
-        setCampaigns((data.campaigns || []) as BrandCampaign[]);
-        setBookings(data.bookings || []);
-        if (data.counts) {
-          setCounts({
-            active: data.counts.active || 0,
-            applications: data.counts.applications || 0,
-            completed: data.counts.completed || 0,
-          });
-        }
-      })
-      .catch(() => {});
-    api
-      .listMessages("all")
-      .then((data) => setMessages(data.messages))
-      .catch(() => {});
-    // Load once when the workspace opens. refreshCreators changes whenever the cache updates.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (matchStage === null || matchStage >= 4) return;
+    const timer = window.setTimeout(() => setMatchStage((stage) => (stage ?? 0) + 1), 1050);
+    return () => window.clearTimeout(timer);
+  }, [matchStage]);
+
+  useEffect(() => {
+    const next =
+      searchMode === "instant"
+        ? { availableOnly: true, niche: "available now" as const }
+        : { availableOnly: false, niche: "For you" as const };
+    setFilters(next);
+    void refreshCreators("", next);
+  }, [searchMode]);
 
   return (
     <div className="screen brand-v2">
@@ -98,84 +73,167 @@ export function BrandHomeV2({
         <div className="bv2-location">
           <small>WORKSPACE</small>
           <strong>
-            {workspace} <Icon name="chevron" size={13} />
+            The Loom <Icon name="chevron" size={13} />
           </strong>
         </div>
-        <button className="bv2-icon-button">
+        <button
+          className="bv2-icon-button"
+          onClick={() => openFlow?.({ name: "notifications", role: "brand" })}
+          aria-label="Open notifications"
+        >
           <Icon name="bell" size={18} />
           <i />
         </button>
-        <button className="bv2-avatar">{initials(userName) || "OR"}</button>
+        <button className="bv2-avatar" onClick={onProfile} aria-label="Open profile">
+          NK
+        </button>
       </header>
 
       <div className="bv2-search">
         <Icon name="search" size={19} />
-        <input placeholder="Search creators, campaigns…" />
-        <button>
+        <input
+          placeholder={
+            searchMode === "instant"
+              ? "Search influencers available now…"
+              : "Search influencers for a date…"
+          }
+        />
+        <button onClick={onExplore} aria-label="Search filters">
           <Icon name="filter" size={17} />
         </button>
       </div>
 
+      <section className={`bv2-search-modes ${searchMode}`}>
+        <div className="bv2-mode-tabs">
+          <button
+            className={searchMode === "instant" ? "active" : ""}
+            onClick={() => setSearchMode("instant")}
+          >
+            <span className="mode-icon instant">
+              <Icon name="trending" size={17} />
+              <i />
+            </span>
+            <p>
+              <strong>Available now</strong>
+              <small>Instant influencer search</small>
+            </p>
+            <i className="mode-radio" />
+          </button>
+          <button
+            className={searchMode === "schedule" ? "active" : ""}
+            onClick={() => setSearchMode("schedule")}
+          >
+            <span className="mode-icon schedule">
+              <Icon name="calendar" size={17} />
+            </span>
+            <p>
+              <strong>Schedule</strong>
+              <small>Find creators for later</small>
+            </p>
+            <i className="mode-radio" />
+          </button>
+        </div>
+
+        {searchMode === "instant" ? (
+          <div className="bv2-instant-state">
+            <div className="instant-avatars">
+              {creators.slice(0, 3).map((creator) => (
+                <img src={creator.image} alt="" key={creator.id} />
+              ))}
+              <strong>+{Math.max(0, creators.length)}</strong>
+            </div>
+            <p>
+              <strong>{creators.length || 0} matching creators online</strong>
+              <small>Average response in 15 minutes</small>
+            </p>
+            <button onClick={() => setPreferencesOpen(true)}>
+              Search now <Icon name="arrow" size={13} />
+            </button>
+          </div>
+        ) : (
+          <div className="bv2-schedule-state">
+            <div className="schedule-days">
+              {[
+                ["Today", "19"],
+                ["Tomorrow", "20"],
+                ["Saturday", "21"],
+                ["Sunday", "22"],
+              ].map(([label, date]) => (
+                <button
+                  className={scheduledDay === label ? "active" : ""}
+                  onClick={() => setScheduledDay(label)}
+                  key={label}
+                >
+                  <small>{label}</small>
+                  <strong>{date}</strong>
+                </button>
+              ))}
+            </div>
+            <button className="schedule-search" onClick={() => setPreferencesOpen(true)}>
+              Find for {scheduledDay.toLowerCase()} <Icon name="arrow" size={13} />
+            </button>
+          </div>
+        )}
+      </section>
+
       <section className="bv2-greeting">
-        <span>
-          {greeting}, {firstName}
-        </span>
+        <span>Good morning, Neha</span>
         <h1>
           Grow your brand
           <br />
           with the right <em>voices.</em>
         </h1>
-        <p>
-          {counts.applications + pending
-            ? `${counts.applications + pending} items need your attention today.`
-            : "Your workspace is up to date."}
-        </p>
+        <p>Three items need your attention today.</p>
       </section>
 
       <div className="bv2-chips">
-        <button className="active">Overview</button>
-        <button>
-          Approvals <b>{pending}</b>
+        <span className="active">Overview</span>
+        <button onClick={() => openFlow?.({ name: "submissions", role: "brand" })}>
+          Approvals <b>3</b>
         </button>
-        <button>
-          Applications <b>{counts.applications}</b>
+        <button onClick={() => openFlow?.({ name: "applications", role: "brand" })}>
+          Applications <b>8</b>
         </button>
-        <button>Reports</button>
+        <button onClick={() => openFlow?.({ name: "brand-analytics", role: "brand" })}>Reports</button>
       </div>
 
       <section className="bv2-featured">
         <img
-          src={recommended[0]?.image || creators[0]?.image || ""}
-          alt={featured?.title || "Campaign"}
+          src="https://images.unsplash.com/photo-1723218624898-2089a034fd36?crop=faces&fit=crop&w=850&h=600&q=88"
+          alt="Summer Edit fashion campaign"
         />
         <div className="bv2-featured-shade" />
         <span className="bv2-live">
-          <i /> {(featured?.status || "active").toUpperCase()} CAMPAIGN
+          <i /> ACTIVE CAMPAIGN
         </span>
-        <button className="bv2-save">
+        <button className="bv2-save" onClick={() => toggleSave(1)} aria-label="Save campaign">
           <Icon name="bookmark" size={17} />
         </button>
         <div className="bv2-featured-copy">
-          <small>{featured?.brand || workspace}</small>
-          <h2>{featured?.title || "No live campaign yet"}</h2>
+          <small>SUMMER EDIT 2025</small>
+          <h2>
+            Colour made
+            <br />
+            for every day.
+          </h2>
           <div>
             <span>
-              <Icon name="user" size={13} /> {featured?.creatorsConfirmed || `${creators.length} creators`}
+              <Icon name="user" size={13} /> 8 creators
             </span>
             <span>
-              <Icon name="calendar" size={13} /> Due {featured?.due || "—"}
+              <Icon name="calendar" size={13} /> Due 28 Jun
             </span>
           </div>
         </div>
         <div className="bv2-campaign-progress">
           <div>
             <span>Campaign progress</span>
-            <strong>{featured?.progress ?? 0}%</strong>
+            <strong>72%</strong>
           </div>
           <i>
-            <b style={{ width: `${featured?.progress ?? 0}%` }} />
+            <b />
           </i>
-          <button onClick={onExplore}>
+          <button onClick={() => openFlow?.({ name: "brand-campaign", role: "brand" })}>
             Manage campaign <Icon name="arrow" size={14} />
           </button>
         </div>
@@ -183,12 +241,21 @@ export function BrandHomeV2({
 
       <div className="bv2-stat-scroll">
         {[
-          [String(counts.active), "Active campaigns", "briefcase"],
-          [String(creators.length), "Creators", "user"],
-          [inrCompact(spend), "Total spend", "wallet"],
-          [String(pending), "Pending approval", "clock"],
+          ["12", "Active campaigns", "briefcase"],
+          ["38", "Creators", "user"],
+          ["₹4.2L", "Total spend", "wallet"],
+          ["3", "Pending approval", "clock"],
         ].map(([value, label, icon], index) => (
-          <button className={index === 3 ? "attention" : ""} key={label}>
+          <button
+            className={index === 3 ? "attention" : ""}
+            key={label}
+            onClick={() => {
+              if (index === 0) onCampaigns?.();
+              else if (index === 1) onExplore();
+              else if (index === 2) openFlow?.({ name: "brand-analytics", role: "brand" });
+              else openFlow?.({ name: "submissions", role: "brand" });
+            }}
+          >
             <span>
               <Icon name={icon as IconName} size={17} />
             </span>
@@ -198,7 +265,11 @@ export function BrandHomeV2({
         ))}
       </div>
 
-      <SectionTitle title="Quick start" action="Edit" onClick={() => {}} />
+      <SectionTitle
+        title="Quick start"
+        action="Edit"
+        onClick={() => openFlow?.({ name: "profile-section", role: "brand", title: "Quick actions" })}
+      />
       <div className="bv2-actions">
         {[
           ["Create campaign", "plus"],
@@ -209,7 +280,12 @@ export function BrandHomeV2({
           <button
             className={`action-${index}`}
             key={label}
-            onClick={label === "Find creators" ? onExplore : undefined}
+            onClick={() => {
+              if (label === "Create campaign") openFlow?.({ name: "campaign-create", role: "brand" });
+              else if (label === "Find creators") onExplore();
+              else if (label === "Invite") openFlow?.({ name: "invite", role: "brand" });
+              else openFlow?.({ name: "ai-assistant", role: "brand" });
+            }}
           >
             <span>
               <Icon name={icon as IconName} size={19} />
@@ -221,7 +297,7 @@ export function BrandHomeV2({
 
       <SectionTitle title="Recommended creators" action="See all" onClick={onExplore} />
       <div className="bv2-creators">
-        {recommended.map((creator) => (
+        {creators.slice(0, 3).map((creator) => (
           <article key={creator.id}>
             <div className="bv2-creator-image" onClick={() => onCreator(creator)}>
               <img src={creator.image} alt={creator.name} />
@@ -270,20 +346,26 @@ export function BrandHomeV2({
         ))}
       </div>
 
-      <SectionTitle title="Needs your attention" action="See all" onClick={() => {}} />
+      <SectionTitle
+        title="Needs your attention"
+        action="See all"
+        onClick={() => openFlow?.({ name: "submissions", role: "brand" })}
+      />
       <div className="bv2-list">
-        {(
-          campaigns.filter((c) => c.needsAttention).length
-            ? campaigns
-                .filter((c) => c.needsAttention)
-                .slice(0, 3)
-                .map((c) => ["briefcase", c.needsAttention || c.title, `${c.title} · due ${c.due}`, "View", "lavender"] as const)
-            : bookings.slice(0, 3).map(
-                (b) =>
-                  ["wallet", b.deliverable, `${b.date} · ${inrCompact(b.price)}`, b.status, "orange"] as const,
-              )
-        ).map(([icon, title, detail, action, tone]) => (
-          <button key={title}>
+        {[
+          ["camera", "Review 3 submissions", "Summer Edit · received today", "Review", "lavender"],
+          ["user", "8 creator applications", "Monsoon Stories · closes Friday", "View", "green"],
+          ["wallet", "Payment due tomorrow", "Everyday Active · ₹42,000", "Pay", "orange"],
+        ].map(([icon, title, detail, action, tone], index) => (
+          <button
+            key={title}
+            onClick={() =>
+              openFlow?.({
+                name: index === 0 ? "submissions" : index === 1 ? "applications" : "payment",
+                role: "brand",
+              })
+            }
+          >
             <span className={tone}>
               <Icon name={icon as IconName} size={17} />
             </span>
@@ -296,12 +378,19 @@ export function BrandHomeV2({
         ))}
       </div>
 
-      <SectionTitle title="Performance" action="Full report" onClick={() => {}} />
-      <section className="bv2-performance">
+      <SectionTitle
+        title="Performance"
+        action="Full report"
+        onClick={() => openFlow?.({ name: "brand-analytics", role: "brand" })}
+      />
+      <section
+        className="bv2-performance"
+        onClick={() => openFlow?.({ name: "brand-analytics", role: "brand" })}
+      >
         <header>
           <div>
-            <small>MATCHED CREATOR REACH</small>
-            <strong>{compactCount(reach)}</strong>
+            <small>TOTAL REACH</small>
+            <strong>8.42M</strong>
           </div>
           <span>
             <Icon name="trending" size={13} /> 18.6%
@@ -330,10 +419,10 @@ export function BrandHomeV2({
         </div>
         <div className="bv2-performance-grid">
           {[
-            [compactCount(reach), "Views"],
-            [`${engagement.toFixed(1)}%`, "Engagement"],
-            [String(creators.length), "Creators"],
-            [String(counts.active), "Campaigns"],
+            ["6.8M", "Views"],
+            ["412K", "Engagement"],
+            ["28.4K", "Clicks"],
+            ["1,842", "Conversions"],
           ].map(([value, label]) => (
             <div key={label}>
               <strong>{value}</strong>
@@ -343,9 +432,13 @@ export function BrandHomeV2({
         </div>
       </section>
 
-      <SectionTitle title="Creator applications" action={`${counts.applications} open`} onClick={onExplore} />
+      <SectionTitle
+        title="Creator applications"
+        action="8 new"
+        onClick={() => openFlow?.({ name: "applications", role: "brand" })}
+      />
       <div className="bv2-applications">
-        {recommended.slice(0, 2).map((creator, index) => (
+        {creators.slice(0, 2).map((creator, index) => (
           <article key={creator.id}>
             <img src={creator.image} alt={creator.name} />
             <div>
@@ -354,33 +447,28 @@ export function BrandHomeV2({
               <small>
                 {creator.niche} · {creator.followers}
               </small>
-              <p>{featured?.title || "Open campaign"}</p>
+              <p>Summer Edit 2025</p>
             </div>
             <aside>
               <strong>{creator.price}</strong>
-              <button>Review</button>
+              <button onClick={() => openFlow?.({ name: "applications", role: "brand" })}>
+                Review
+              </button>
             </aside>
           </article>
         ))}
       </div>
 
-      <SectionTitle title="Collaborating creators" action="View all" onClick={() => {}} />
+      <SectionTitle title="Collaborating creators" action="View all" onClick={onExplore} />
       <div className="bv2-collaborators">
-        {(bookings.length
-          ? bookings
-              .map((booking) => creators.find((creator) => creator.id === booking.creatorId))
-              .filter((creator): creator is Creator => Boolean(creator))
-          : recommended
-        )
-          .slice(0, 4)
-          .map((creator, index) => (
+        {creators.map((creator, index) => (
           <button key={creator.id} onClick={() => onCreator(creator)}>
             <div>
               <img src={creator.image} alt={creator.name} />
-              <i className={creator.available ? "" : "away"} />
+              <i className={index === 2 ? "away" : ""} />
             </div>
             <strong>{creator.name.split(" ")[0]}</strong>
-            <small>{bookings[index]?.status || (creator.available ? "Available" : "Busy")}</small>
+            <small>{["Submitted", "Creating", "Awaiting", "Approved"][index]}</small>
           </button>
         ))}
       </div>
@@ -395,33 +483,36 @@ export function BrandHomeV2({
             <strong>A regional opportunity</strong>
           </div>
         </header>
-        <h3>
-          {recommended[0]
-            ? `${recommended[0].name} in ${recommended[0].city} is your strongest match at ${recommended[0].match}%.`
-            : "Add a campaign to see creator matches from your workspace."}
-        </h3>
-        <p>
-          Based on {creators.length} live creator profiles
-          {featured ? ` and ${featured.title}.` : "."}
-        </p>
+        <h3>Telugu lifestyle creators are outperforming your category by 1.8×.</h3>
+        <p>Based on audience overlap and 42 recent fashion campaigns.</p>
         <div>
-          <button>Explore creators</button>
-          <button>
+          <button onClick={onExplore}>Explore creators</button>
+          <button onClick={() => openFlow?.({ name: "ai-assistant", role: "brand" })}>
             Ask AI <Icon name="arrow" size={13} />
           </button>
         </div>
       </section>
 
-      <SectionTitle title="Recent activity" action="All activity" onClick={() => {}} />
+      <SectionTitle
+        title="Recent activity"
+        action="All activity"
+        onClick={() => openFlow?.({ name: "notifications", role: "brand" })}
+      />
       <div className="bv2-activity">
-        {(messages.length
-          ? messages.slice(0, 3).map((msg) => ["message", msg.preview, msg.campaign, msg.time] as const)
-          : bookings.slice(0, 3).map(
-              (booking) =>
-                ["wallet", booking.deliverable, booking.date, booking.status] as const,
-            )
-        ).map(([icon, title, detail, time], index) => (
-          <button key={title}>
+        {[
+          ["check", "Aarohi accepted your invitation", "Summer Edit 2025", "12m"],
+          ["camera", "Rhea submitted a final reel", "Monsoon Stories", "1h"],
+          ["wallet", "Payment processed", "Everyday Active · ₹18K", "1d"],
+        ].map(([icon, title, detail, time], index) => (
+          <button
+            key={title}
+            onClick={() =>
+              openFlow?.({
+                name: index === 0 ? "applications" : index === 1 ? "submissions" : "payment",
+                role: "brand",
+              })
+            }
+          >
             <span className={`tone-${index}`}>
               <Icon name={icon as IconName} size={15} />
             </span>
@@ -446,11 +537,7 @@ export function BrandHomeV2({
           </div>
         </div>
         <div className="bv2-prompts">
-          {[
-            recommended[0] ? `Find creators like ${recommended[0].name.split(" ")[0]}` : "Find creators",
-            featured ? `Review ${featured.title}` : "Plan a campaign",
-            `Spend so far ${inrCompact(spend)}`,
-          ].map((item) => (
+          {["Find Telugu creators", "Plan a ₹50K launch", "Analyze Summer Edit"].map((item) => (
             <button key={item} onClick={() => setPrompt(item)}>
               {item}
             </button>
@@ -462,13 +549,55 @@ export function BrandHomeV2({
             onChange={(event) => setPrompt(event.target.value)}
             placeholder="Ask anything about your growth…"
           />
-          <button>
+          <button onClick={() => openFlow?.({ name: "ai-assistant", role: "brand", context: prompt })}>
             <Icon name="arrow" size={16} />
           </button>
         </div>
         <p>Recommendations are directional and require your confirmation.</p>
       </section>
+
+      {matchStage !== null && (
+        <CreatorMatchLoader
+          stage={matchStage}
+          mode={searchMode}
+          scheduledDay={scheduledDay}
+          onClose={() => setMatchStage(null)}
+          onResults={() => {
+            setMatchStage(null);
+            if (searchMode === "instant") setInstantDeckOpen(true);
+            else onExplore();
+          }}
+        />
+      )}
+      {preferencesOpen && (
+        <CreatorSearchPreferences
+          mode={searchMode}
+          scheduledDay={scheduledDay}
+          onClose={() => setPreferencesOpen(false)}
+          onSearch={() => {
+            setPreferencesOpen(false);
+            setMatchStage(0);
+          }}
+        />
+      )}
+      {instantDeckOpen && (
+        <InstantCreatorDeck
+          creators={creators}
+          onClose={() => setInstantDeckOpen(false)}
+          onOpenChat={() => {
+            setInstantDeckOpen(false);
+            onInbox?.();
+          }}
+          onBrowseAll={() => {
+            setInstantDeckOpen(false);
+            onExplore();
+          }}
+          onBook={(creator) => {
+            setInstantDeckOpen(false);
+            onBookInstant?.(creator);
+          }}
+        />
+      )}
     </div>
   );
 }
-

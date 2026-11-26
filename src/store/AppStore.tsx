@@ -64,13 +64,22 @@ type AppStoreValue = {
     deliverable: string;
     price: number;
     date: string;
+    time?: string;
     location: string;
     mode?: "instant" | "schedule";
+    bookingType?: import("../types").BookingType;
     brief?: string;
     multiplier?: number;
   }) => Promise<Booking>;
+  updateBookingStatus: (
+    id: string,
+    status: "accepted" | "rejected" | "completed",
+  ) => Promise<Booking>;
+  issueBookingStartOtp: (id: string) => Promise<{ booking: Booking; code: string; expiresAt: string }>;
+  verifyBookingStart: (id: string, code: string) => Promise<Booking>;
+  refreshBookings: () => Promise<Booking[]>;
   filterCreators: (query: string) => Creator[];
-  refreshCreators: (query?: string) => Promise<Creator[]>;
+  refreshCreators: (query?: string, filterOverride?: Partial<ExploreFilters>) => Promise<Creator[]>;
   refreshSession: () => Promise<void>;
 };
 
@@ -103,9 +112,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshCreators = useCallback(
-    async (query = "") => {
+    async (query = "", filterOverride?: Partial<ExploreFilters>) => {
       try {
-        const { filters } = state;
+        const filters = { ...state.filters, ...filterOverride };
         const data = await api.listCreators({
           query,
           category: filters.category,
@@ -119,6 +128,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         });
         setState((s) => ({
           ...s,
+          filters: filterOverride ? { ...s.filters, ...filterOverride } : s.filters,
           creatorsCache: data.creators,
           likedIds: data.likedIds,
           savedIds: data.savedIds,
@@ -311,10 +321,44 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       clearFilters: () => setState((s) => ({ ...s, filters: { ...defaultFilters } })),
       addBooking: async (input) => {
         const { booking } = await api.createBooking(input);
-        setState((s) => ({ ...s, bookings: [booking, ...s.bookings] }));
+        setState((s) => ({ ...s, bookings: [booking, ...s.bookings.filter((b) => b.id !== booking.id)] }));
         return booking;
       },
       syncCampaignPrefs,
+      updateBookingStatus: async (id, status) => {
+        const { booking } = await api.updateBookingStatus(id, status);
+        setState((s) => ({
+          ...s,
+          bookings: s.bookings.map((b) => (b.id === id ? booking : b)),
+        }));
+        return booking;
+      },
+      issueBookingStartOtp: async (id) => {
+        const data = await api.issueBookingStartOtp(id);
+        setState((s) => ({
+          ...s,
+          bookings: s.bookings.map((b) => (b.id === id ? data.booking : b)),
+        }));
+        return data;
+      },
+      verifyBookingStart: async (id, code) => {
+        const { booking } = await api.verifyBookingStart(id, code);
+        setState((s) => ({
+          ...s,
+          bookings: s.bookings.map((b) => (b.id === id ? booking : b)),
+        }));
+        return booking;
+      },
+      refreshBookings: async () => {
+        try {
+          const { bookings } = await api.listBookings();
+          setState((s) => ({ ...s, bookings, apiOnline: true }));
+          return bookings;
+        } catch {
+          setState((s) => ({ ...s, apiOnline: false }));
+          return state.bookings;
+        }
+      },
       filterCreators: (query: string) => {
         const q = query.trim().toLowerCase();
         const { filters, creatorsCache, likedIds, savedIds } = state;
@@ -331,7 +375,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           const niche = filters.niche.toLowerCase();
           list = list.filter((c) => {
             if (niche === "nearby") return ["Mumbai", "Pune"].includes(c.city);
-            if (niche === "available now") return c.available;
+            if (niche === "available now") return c.available && (c.availability?.sameDay ?? true);
             return (
               c.tags.some((t) => t.toLowerCase() === niche) || c.niche.toLowerCase().includes(niche)
             );

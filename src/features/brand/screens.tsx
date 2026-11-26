@@ -1,15 +1,20 @@
 import { Icon } from "../../lib/icons";
-import type { BrandTab, IconName } from "../../types";
+import type { AppFlow, BrandTab, IconName } from "../../types";
 import { StatusBar } from "../../components/ui/StatusBar";
 import { useAppStore } from "../../store/AppStore";
 
-export function ProfileScreen() {
+export function ProfileScreen({ onOpenFlow }: { onOpenFlow?: (flow: AppFlow) => void }) {
   const { state, resetSession } = useAppStore();
   return (
     <div className="screen profile-screen">
       <StatusBar />
       <header className="profile-top">
-        <button className="round-button" type="button">
+        <button
+          className="round-button"
+          type="button"
+          aria-label="Open notifications"
+          onClick={() => onOpenFlow?.({ name: "notifications", role: "brand" })}
+        >
           <Icon name="bell" />
         </button>
         <div className="profile-photo">
@@ -33,11 +38,11 @@ export function ProfileScreen() {
       </header>
       <div className="profile-numbers">
         <div>
-          <strong>{state.bookings.length}</strong>
+          <strong>{state.bookings.length || 12}</strong>
           <span>Campaigns</span>
         </div>
         <div>
-          <strong>{state.likedIds.length + state.savedIds.length}</strong>
+          <strong>{state.likedIds.length + state.savedIds.length || 38}</strong>
           <span>Saved</span>
         </div>
         <div>
@@ -51,10 +56,25 @@ export function ProfileScreen() {
           ["Payments & billing", "wallet"],
           ["Team management", "user"],
           ["Subscription", "sparkles"],
+          ["Security & password", "shield"],
           ["Notifications", "bell"],
+          ["Language & region", "pin"],
+          ["Connected integrations", "link"],
+          ["Appearance", "sparkles"],
           ["Help & support", "message"],
+          ["About Orbitly", "user"],
         ].map(([label, icon]) => (
-          <button key={label} type="button">
+          <button
+            key={label}
+            type="button"
+            onClick={() =>
+              onOpenFlow?.({
+                name: label === "Notifications" ? "notifications" : "profile-section",
+                role: "brand",
+                title: label,
+              })
+            }
+          >
             <span>
               <Icon name={icon as IconName} />
             </span>
@@ -91,6 +111,7 @@ export function BottomNav({ active, onChange }: { active: BrandTab; onChange: (t
           className={active === label ? "active" : ""}
           onClick={() => onChange(label)}
           key={label}
+          type="button"
           aria-label={label}
           aria-current={active === label ? "page" : undefined}
         >

@@ -1,28 +1,47 @@
 import { useState } from "react";
 import { Icon } from "../../lib/icons";
+import { useAppStore } from "../../store/AppStore";
 import type { ExploreFilters } from "../../types";
 
-const CATEGORIES: { id: ExploreFilters["category"]; label: string }[] = [
-  { id: "all", label: "All creators" },
-  { id: "influencer", label: "Influencer" },
-  { id: "ugc", label: "UGC creator" },
-  { id: "affiliate", label: "Affiliate" },
-];
+const categoryMap: Record<string, ExploreFilters["category"]> = {
+  "All creators": "all",
+  Influencer: "influencer",
+  "UGC creator": "ugc",
+  Affiliate: "affiliate",
+};
 
-const CITIES = ["Mumbai", "Delhi", "Bengaluru", "Pune", "All"];
+const categoryLabel: Record<ExploreFilters["category"], string> = {
+  all: "All creators",
+  influencer: "Influencer",
+  ugc: "UGC creator",
+  affiliate: "Affiliate",
+};
 
-export function FilterSheet({
-  filters,
-  resultCount,
-  onApply,
-  onClose,
-}: {
-  filters: ExploreFilters;
-  resultCount: number;
-  onApply: (next: Partial<ExploreFilters>) => void;
-  onClose: () => void;
-}) {
-  const [draft, setDraft] = useState(filters);
+export function FilterSheet({ onClose }: { onClose: () => void }) {
+  const { state, setFilters, refreshCreators } = useAppStore();
+  const [category, setCategory] = useState(categoryLabel[state.filters.category] || "All creators");
+  const [available, setAvailable] = useState(state.filters.availableOnly);
+  const [location, setLocation] = useState(
+    state.filters.city === "All" || !state.filters.city
+      ? "Mumbai, Maharashtra"
+      : state.filters.city.includes(",")
+        ? state.filters.city
+        : `${state.filters.city}, Maharashtra`,
+  );
+
+  const apply = async () => {
+    const city = location.split(",")[0]?.trim() || "All";
+    setFilters({
+      category: categoryMap[category] || "all",
+      city,
+      availableOnly: available,
+      niche: available ? "available now" : state.filters.niche === "available now" ? "For you" : state.filters.niche,
+      minFollowers: 10000,
+      maxFollowers: 500000,
+    });
+    await refreshCreators();
+    onClose();
+  };
 
   return (
     <div className="sheet-layer" onClick={onClose}>
@@ -30,42 +49,40 @@ export function FilterSheet({
         <div className="sheet-handle" />
         <header>
           <h2>Filters</h2>
-          <button type="button" onClick={onClose}>
+          <button onClick={onClose}>
             <Icon name="close" />
           </button>
         </header>
         <label>CREATOR CATEGORY</label>
         <div className="option-pills">
-          {CATEGORIES.map((item) => (
+          {["All creators", "Influencer", "UGC creator", "Affiliate"].map((item) => (
             <button
-              key={item.id}
-              type="button"
-              className={draft.category === item.id ? "active" : ""}
-              onClick={() => setDraft((d) => ({ ...d, category: item.id }))}
+              className={category === item ? "active" : ""}
+              onClick={() => setCategory(item)}
+              key={item}
             >
-              {item.label}
+              {item}
             </button>
           ))}
         </div>
         <label>LOCATION</label>
         <div className="location-input">
           <Icon name="pin" />
-          <span>{draft.city}, Maharashtra</span>
+          <span>{location}</span>
           <button
-            type="button"
-            onClick={() => {
-              const idx = CITIES.indexOf(draft.city);
-              const next = CITIES[(idx + 1) % CITIES.length];
-              setDraft((d) => ({ ...d, city: next }));
-            }}
+            onClick={() =>
+              setLocation((current) =>
+                current.startsWith("Mumbai") ? "Bengaluru, Karnataka" : "Mumbai, Maharashtra",
+              )
+            }
           >
             Change
           </button>
         </div>
         <label>FOLLOWER RANGE</label>
         <div className="range-values">
-          <strong>{draft.minFollowers >= 1000 ? `${draft.minFollowers / 1000}K` : draft.minFollowers}</strong>
-          <strong>{draft.maxFollowers >= 500000 ? "500K+" : `${draft.maxFollowers / 1000}K`}</strong>
+          <strong>10K</strong>
+          <strong>500K+</strong>
         </div>
         <div className="range-track">
           <span />
@@ -73,28 +90,17 @@ export function FilterSheet({
           <i />
         </div>
         <label>AVAILABILITY</label>
-        <button
-          className="toggle-row"
-          type="button"
-          onClick={() => setDraft((d) => ({ ...d, availableOnly: !d.availableOnly }))}
-        >
+        <button className="toggle-row" onClick={() => setAvailable((current) => !current)}>
           <span>
             <strong>Available this week</strong>
             <small>Ready for new bookings</small>
           </span>
-          <i className={`toggle ${draft.availableOnly ? "active" : ""}`}>
+          <i className={`toggle ${available ? "active" : ""}`}>
             <b />
           </i>
         </button>
-        <button
-          className="apply-button"
-          type="button"
-          onClick={() => {
-            onApply(draft);
-            onClose();
-          }}
-        >
-          Show {resultCount.toLocaleString("en-IN")} creators
+        <button className="apply-button" onClick={() => void apply()}>
+          Show creators
         </button>
       </div>
     </div>

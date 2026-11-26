@@ -51,6 +51,13 @@ const CreatorSchema = new Schema(
     available: Boolean,
     category: { type: String, enum: ["influencer", "ugc", "affiliate"] },
     tags: [String],
+    availability: {
+      workingDays: [Number],
+      startTime: String,
+      endTime: String,
+      leadTime: String,
+      sameDay: Boolean,
+    },
   },
   { versionKey: false },
 );
@@ -93,18 +100,26 @@ const BookingSchema = new Schema(
     deliverable: String,
     price: Number,
     date: String,
+    time: String,
     location: String,
+    bookingType: { type: String, enum: ["instant", "scheduled"], default: "scheduled" },
     mode: { type: String, enum: ["instant", "schedule"], default: "schedule" },
     brief: String,
     status: {
       type: String,
-      enum: ["pending", "accepted", "completed", "declined"],
+      enum: ["pending", "accepted", "rejected", "in_progress", "completed", "declined"],
       default: "pending",
     },
+    brandName: String,
+    creatorName: String,
     campaignId: String,
     workItemId: String,
     threadId: String,
     createdAt: String,
+    startOtpHash: String,
+    startOtpExpiresAt: String,
+    startedAt: String,
+    completedAt: String,
   },
   { versionKey: false },
 );
@@ -191,6 +206,18 @@ const PrefsSchema = new Schema(
   { versionKey: false },
 );
 
+const ChatLineSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    threadKey: { type: String, required: true, index: true },
+    senderUserId: { type: String, required: true, index: true },
+    peerCreatorId: { type: Number, required: true, index: true },
+    text: { type: String, required: true },
+    createdAt: { type: String, required: true },
+  },
+  { versionKey: false },
+);
+
 export const UserModel = mongoose.models.User || mongoose.model("User", UserSchema);
 export const OtpModel = mongoose.models.Otp || mongoose.model("Otp", OtpSchema);
 export const CreatorModel = mongoose.models.Creator || mongoose.model("Creator", CreatorSchema);
@@ -205,6 +232,8 @@ export const WorkItemModel =
 export const TransactionModel =
   mongoose.models.Transaction || mongoose.model("Transaction", TransactionSchema);
 export const PrefsModel = mongoose.models.Prefs || mongoose.model("Prefs", PrefsSchema);
+export const ChatLineModel =
+  mongoose.models.ChatLine || mongoose.model("ChatLine", ChatLineSchema);
 
 export function lean<T>(doc: any): T {
   if (!doc) return doc;

@@ -26,6 +26,14 @@ export type OtpRecord = {
   attempts: number;
 };
 
+export type CreatorAvailability = {
+  workingDays: number[];
+  startTime: string;
+  endTime: string;
+  leadTime: string;
+  sameDay: boolean;
+};
+
 export type CreatorProfile = {
   id: number;
   userId?: string;
@@ -44,7 +52,10 @@ export type CreatorProfile = {
   available: boolean;
   category: "influencer" | "ugc" | "affiliate";
   tags: string[];
+  availability?: CreatorAvailability;
 };
+
+export type BookingType = "instant" | "scheduled";
 
 export type Campaign = {
   id: string;
@@ -80,14 +91,22 @@ export type Booking = {
   deliverable: string;
   price: number;
   date: string;
+  time?: string;
   location: string;
-  mode: "instant" | "schedule";
-  brief: string;
-  status: "pending" | "accepted" | "completed" | "declined";
+  bookingType: BookingType;
+  mode?: "instant" | "schedule";
+  brief?: string;
+  status: "pending" | "accepted" | "rejected" | "in_progress" | "completed" | "declined";
+  brandName?: string;
+  creatorName?: string;
   campaignId?: string;
   workItemId?: string;
   threadId?: string;
   createdAt: string;
+  startOtpHash?: string;
+  startOtpExpiresAt?: string;
+  startedAt?: string;
+  completedAt?: string;
 };
 
 export type Message = {
@@ -110,6 +129,15 @@ export type ChatMessage = {
   id: string;
   threadId: string;
   senderUserId: string;
+  text: string;
+  createdAt: string;
+};
+
+export type ChatLine = {
+  id: string;
+  threadKey: string;
+  senderUserId: string;
+  peerCreatorId: number;
   text: string;
   createdAt: string;
 };
