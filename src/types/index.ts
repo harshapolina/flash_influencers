@@ -32,6 +32,42 @@ export type OnboardingRole = "brand" | "creator";
 export type BrandTab = "Home" | "Explore" | "Campaigns" | "Inbox" | "Profile";
 export type CreatorTab = "Home" | "Opportunities" | "Work" | "Earnings" | "Profile";
 
+/** Secondary screens from Figma Make (`PrototypeFlowScreen`). */
+export type FlowName =
+  | "notifications"
+  | "saved-creators"
+  | "saved-opportunities"
+  | "campaign-create"
+  | "brand-campaign"
+  | "creator-campaign"
+  | "submissions"
+  | "applications"
+  | "payment"
+  | "brand-analytics"
+  | "creator-analytics"
+  | "invite"
+  | "ai-assistant"
+  | "opportunity"
+  | "withdraw"
+  | "transactions"
+  | "brief-preview"
+  | "profile-section";
+
+export type AppFlow = {
+  name: FlowName;
+  title?: string;
+  context?: string;
+  role?: OnboardingRole;
+};
+
+export type CreatorAvailability = {
+  workingDays: number[];
+  startTime: string;
+  endTime: string;
+  leadTime: string;
+  sameDay: boolean;
+};
+
 export type Creator = {
   id: number;
   name: string;
@@ -49,7 +85,10 @@ export type Creator = {
   available: boolean;
   category: "influencer" | "ugc" | "affiliate";
   tags: string[];
+  availability?: CreatorAvailability;
 };
+
+export type BookingType = "instant" | "scheduled";
 
 export type Campaign = {
   id: string;
@@ -94,9 +133,16 @@ export type Booking = {
   deliverable: string;
   price: number;
   date: string;
+  time?: string;
   location: string;
-  status: "pending" | "accepted" | "completed";
+  bookingType?: BookingType;
+  brief?: string;
+  status: "pending" | "accepted" | "rejected" | "in_progress" | "completed";
+  brandName?: string;
+  creatorName?: string;
   createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
 };
 
 export type ExploreFilters = {

@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { nanoid } from "nanoid";
+import { z } from "zod";
 import { store } from "../db/store.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { fail, ok } from "../utils/http.js";
@@ -6,6 +8,52 @@ import { fail, ok } from "../utils/http.js";
 export const campaignsRouter = Router();
 
 campaignsRouter.use(requireAuth);
+
+campaignsRouter.post("/", async (req: AuthedRequest, res) => {
+  try {
+    if (req.user!.role !== "brand") return fail(res, new Error("Brands only"), 403);
+    const body = z
+      .object({
+        title: z.string().min(2).max(120),
+        type: z.string().optional().default("Instagram Reel"),
+        pay: z.string().optional().default("₹80,000"),
+        deliverables: z.string().optional().default("Reels and Stories"),
+        tags: z.array(z.string()).optional().default(["Fashion", "Lifestyle"]),
+        due: z.string().optional(),
+        applyBy: z.string().optional(),
+      })
+      .parse(req.body);
+
+    const brandName =
+      (typeof req.user!.profile?.brandName === "string" && req.user!.profile.brandName) ||
+      req.user!.name ||
+      "Brand";
+    const due = body.due || "30 days";
+    const applyBy = body.applyBy || "Open";
+    const campaign = await store.createCampaign({
+      id: `cmp-${nanoid(8)}`,
+      ownerUserId: req.user!.id,
+      title: body.title,
+      brand: brandName,
+      pay: body.pay,
+      type: body.type,
+      color: "#E8F0E4",
+      icon: body.title.slice(0, 2).toUpperCase(),
+      tags: body.tags,
+      applyBy,
+      match: 90,
+      status: "applications",
+      progress: 5,
+      creatorsConfirmed: "0 confirmed",
+      due,
+      deliverables: body.deliverables,
+      needsAttention: "New campaign — invite creators",
+    });
+    return ok(res, { campaign });
+  } catch (error) {
+    return fail(res, error);
+  }
+});
 
 campaignsRouter.get("/", async (req: AuthedRequest, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
@@ -16,15 +64,18 @@ campaignsRouter.get("/", async (req: AuthedRequest, res) => {
   if (role === "brand") {
     let list = [...campaigns];
     if (status) list = list.filter((c) => c.status === status);
-    const bookings = await store.listBookings(req.user!.id);
+    const bookings = await store.listBookings({ brandUserId: req.user!.id });
+    const pendingBookings = bookings.filter((b) => b.status === "pending").length;
+    const acceptedBookings = bookings.filter((b) => b.status === "accepted").length;
+    const completedBookings = bookings.filter((b) => b.status === "completed").length;
     return ok(res, {
       campaigns: list,
       bookings,
       counts: {
-        active: campaigns.filter((c) => c.status === "active").length,
+        active: campaigns.filter((c) => c.status === "active").length + acceptedBookings,
         applications:
-          campaigns.filter((c) => c.status === "applications").length + bookings.length,
-        completed: campaigns.filter((c) => c.status === "completed").length,
+          campaigns.filter((c) => c.status === "applications").length + pendingBookings,
+        completed: campaigns.filter((c) => c.status === "completed").length + completedBookings,
       },
     });
   }

@@ -1,7 +1,8 @@
+import { useState } from "react";
+import { creators } from "../../data";
 import { Icon } from "../../lib/icons";
-import type { Creator } from "../../types";
-import { useAppStore } from "../../store/AppStore";
 import { StatusBar } from "../ui/StatusBar";
+import type { Creator } from "../../types";
 
 export function CreatorDetail({
   creator,
@@ -16,8 +17,7 @@ export function CreatorDetail({
   onClose: () => void;
   onBook: () => void;
 }) {
-  const { state } = useAppStore();
-  const similar = state.creatorsCache.filter((item) => item.id !== creator.id).slice(0, 3);
+  const [showAllWork, setShowAllWork] = useState(false);
   return (
     <div className="detail-layer">
       <div className="detail-screen">
@@ -25,14 +25,10 @@ export function CreatorDetail({
           <img src={creator.image} alt={creator.name} />
           <div className="detail-gradient" />
           <StatusBar />
-          <button className="detail-back" onClick={onClose} type="button">
+          <button className="detail-back" onClick={onClose}>
             ‹
           </button>
-          <button
-            className={`detail-like ${liked ? "active" : ""}`}
-            onClick={onLike}
-            type="button"
-          >
+          <button className={`detail-like ${liked ? "active" : ""}`} onClick={onLike}>
             <Icon name="heart" fill={liked} />
           </button>
           <div className="detail-name">
@@ -81,26 +77,30 @@ export function CreatorDetail({
               <Icon name="instagram" size={15} /> Social connected
             </span>
             <span>
-              <i /> {creator.available ? "Available" : "Busy"}
+              <i /> Available
             </span>
           </div>
-          <h3>Why {creator.name.split(" ")[0]} fits your brand</h3>
+          <h3>Why Aarohi fits your brand</h3>
           <div className="ai-note">
             <Icon name="sparkles" />
             <p>
-              {creator.niche} creator in {creator.city} with{" "}
-              <strong>{creator.engagement} engagement</strong> and {creator.followers} followers.
-              <small>From the live creator profile</small>
+              Strong audience overlap with urban women 18–34 and <strong>2.1× higher</strong>{" "}
+              engagement than your category average.
+              <small>AI insight · Results are estimates</small>
             </p>
           </div>
           <div className="detail-title">
             <h3>Recent work</h3>
-            <button type="button">View all</button>
+            <button onClick={() => setShowAllWork((current) => !current)}>
+              {showAllWork ? "Show less" : "View all"}
+            </button>
           </div>
           <div className="work-grid">
-            {similar.map((c) => (
-                <img key={c.id} src={c.image} alt="Portfolio sample" />
-              ))}
+            {(showAllWork ? creators.concat(creators.slice(0, 2)) : creators.slice(1, 4)).map(
+              (c, index) => (
+                <img key={`${c.id}-${index}`} src={c.image} alt="Portfolio sample" />
+              ),
+            )}
           </div>
           <h3>Popular packages</h3>
           <div className="package-row">
@@ -136,7 +136,7 @@ export function CreatorDetail({
               <span> / reel</span>
             </strong>
           </div>
-          <button type="button" onClick={onBook}>
+          <button onClick={onBook}>
             Book creator <Icon name="arrow" size={16} />
           </button>
         </div>

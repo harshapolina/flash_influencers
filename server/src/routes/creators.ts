@@ -49,12 +49,14 @@ creatorsRouter.get("/", optionalAuth, async (req: AuthedRequest, res) => {
       ) {
         return false;
       }
-      if (q.availableOnly && !c.available) return false;
+      if (q.availableOnly && !(c.available && (c.availability?.sameDay ?? true))) return false;
       if (c.followersCount < q.minFollowers || c.followersCount > q.maxFollowers) return false;
       if (q.niche && q.niche !== "For you") {
         const niche = q.niche.toLowerCase();
         if (niche === "nearby") return ["Mumbai", "Pune"].includes(c.city);
-        if (niche === "available now") return c.available;
+        if (niche === "available now") {
+          return c.available && (c.availability?.sameDay ?? true);
+        }
         if (
           !c.tags.some((t) => t.toLowerCase() === niche) &&
           !c.niche.toLowerCase().includes(niche)
@@ -77,6 +79,38 @@ creatorsRouter.get("/", optionalAuth, async (req: AuthedRequest, res) => {
       likedIds: prefs?.likedCreatorIds ?? [],
       savedIds: prefs?.savedCreatorIds ?? [],
     });
+  } catch (error) {
+    return fail(res, error);
+  }
+});
+
+creatorsRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    if (req.user!.role !== "creator") return fail(res, new Error("Creators only"), 403);
+    const creator = await store.findCreatorByUserId(req.user!.id);
+    if (!creator) return fail(res, new Error("Creator profile not found"), 404);
+    return ok(res, { creator });
+  } catch (error) {
+    return fail(res, error);
+  }
+});
+
+creatorsRouter.patch("/me/availability", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    if (req.user!.role !== "creator") return fail(res, new Error("Creators only"), 403);
+    const body = z
+      .object({
+        available: z.boolean().optional(),
+        sameDay: z.boolean().optional(),
+        leadTime: z.string().optional(),
+        workingDays: z.array(z.number().int().min(1).max(7)).optional(),
+        startTime: z.string().optional(),
+        endTime: z.string().optional(),
+      })
+      .parse(req.body);
+    const creator = await store.updateCreatorAvailability(req.user!.id, body);
+    if (!creator) return fail(res, new Error("Creator profile not found"), 404);
+    return ok(res, { creator });
   } catch (error) {
     return fail(res, error);
   }

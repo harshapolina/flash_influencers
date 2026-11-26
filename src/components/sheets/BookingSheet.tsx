@@ -1,35 +1,39 @@
-import { useMemo, useState } from "react";
-import { DELIVERABLES, PLATFORM_FEE_RATE, formatInr } from "../../data";
+import { useState } from "react";
+import { PLATFORM_FEE_RATE, formatInr } from "../../data";
 import { Icon } from "../../lib/icons";
-import type { Creator } from "../../types";
+import type { BookingType, Creator } from "../../types";
 
 export function BookingSheet({
   creator,
   successId,
+  bookingType = "scheduled",
   onSuccess,
   onClose,
 }: {
   creator: Creator;
   successId: string | null;
+  bookingType?: BookingType;
   onSuccess: (payload: {
     deliverable: string;
     price: number;
     date: string;
     location: string;
-  }) => void;
+    bookingType: BookingType;
+    multiplier: number;
+  }) => void | Promise<void>;
   onClose: () => void;
 }) {
-  const [deliverableId, setDeliverableId] = useState<(typeof DELIVERABLES)[number]["id"]>("reel");
-  const [date, setDate] = useState("28 Jun");
-  const [location, setLocation] = useState(creator.city);
+  const [deliverable, setDeliverable] = useState<"reel" | "bundle">("reel");
+  const [date, setDate] = useState(bookingType === "instant" ? "Today" : "28 Jun");
+  const [location, setLocation] = useState(creator.city || "Mumbai");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  const selected = DELIVERABLES.find((d) => d.id === deliverableId) ?? DELIVERABLES[0];
-  const subtotal = Math.round(creator.priceValue * selected.multiplier);
+  const multiplier = deliverable === "bundle" ? 1.5 : 1;
+  const subtotal = Math.round(creator.priceValue * multiplier);
   const fee = Math.round(subtotal * PLATFORM_FEE_RATE);
   const total = subtotal + fee;
-
-  const dates = useMemo(() => ["28 Jun", "02 Jul", "05 Jul", "12 Jul"], []);
-  const locations = useMemo(() => ["Mumbai", "Delhi", "Bengaluru", "Pune", "Remote"], []);
+  const deliverableTitle = deliverable === "reel" ? "Instagram Reel" : "Reel + 3 Stories";
 
   if (successId) {
     return (
@@ -72,7 +76,10 @@ export function BookingSheet({
           <img src={creator.image} alt="" />
           <p>
             <strong>{creator.name}</strong>
-            <small>{creator.handle}</small>
+            <small>
+              {creator.handle}
+              {bookingType === "instant" ? " · Instant" : " · Scheduled"}
+            </small>
           </p>
           <span>
             <Icon name="star" fill size={12} />
@@ -80,28 +87,42 @@ export function BookingSheet({
           </span>
         </div>
         <label>SELECT DELIVERABLE</label>
-        {DELIVERABLES.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`deliverable ${deliverableId === item.id ? "active" : ""}`}
-            onClick={() => setDeliverableId(item.id)}
-          >
-            <i />
-            <p>
-              <strong>{item.title}</strong>
-              <small>{item.detail}</small>
-            </p>
-            <b>{formatInr(Math.round(creator.priceValue * item.multiplier))}</b>
-          </button>
-        ))}
+        <button
+          type="button"
+          className={`deliverable ${deliverable === "reel" ? "active" : ""}`}
+          onClick={() => setDeliverable("reel")}
+        >
+          <i />
+          <p>
+            <strong>Instagram Reel</strong>
+            <small>Up to 60 sec · 1 revision</small>
+          </p>
+          <b>{formatInr(Math.round(creator.priceValue))}</b>
+        </button>
+        <button
+          type="button"
+          className={`deliverable ${deliverable === "bundle" ? "active" : ""}`}
+          onClick={() => setDeliverable("bundle")}
+        >
+          <i />
+          <p>
+            <strong>Reel + 3 Stories</strong>
+            <small>Campaign bundle · 1 revision</small>
+          </p>
+          <b>{formatInr(Math.round(creator.priceValue * 1.5))}</b>
+        </button>
         <div className="date-location">
           <button
             type="button"
-            onClick={() => {
-              const idx = dates.indexOf(date);
-              setDate(dates[(idx + 1) % dates.length]);
-            }}
+            onClick={() =>
+              setDate((current) =>
+                bookingType === "instant"
+                  ? "Today"
+                  : current === "28 Jun"
+                    ? "2 Jul"
+                    : "28 Jun",
+              )
+            }
           >
             <span>CAMPAIGN DATE</span>
             <strong>
@@ -111,10 +132,7 @@ export function BookingSheet({
           </button>
           <button
             type="button"
-            onClick={() => {
-              const idx = locations.indexOf(location);
-              setLocation(locations[(idx + 1) % locations.length]);
-            }}
+            onClick={() => setLocation((current) => (current === creator.city ? "Remote" : creator.city || "Mumbai"))}
           >
             <span>LOCATION</span>
             <strong>
@@ -129,19 +147,32 @@ export function BookingSheet({
           </span>
           <strong>{formatInr(total)}</strong>
         </div>
+        {error ? <p className="booking-error">{error}</p> : null}
         <button
           className="apply-button"
           type="button"
-          onClick={() =>
-            onSuccess({
-              deliverable: selected.title,
-              price: total,
-              date,
-              location,
-            })
-          }
+          disabled={submitting}
+          onClick={async () => {
+            setSubmitting(true);
+            setError("");
+            try {
+              await onSuccess({
+                deliverable: deliverableTitle,
+                price: total,
+                date,
+                location,
+                bookingType,
+                multiplier,
+              });
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Could not send booking");
+            } finally {
+              setSubmitting(false);
+            }
+          }}
         >
-          Send booking request <Icon name="arrow" size={16} />
+          {submitting ? "Sending…" : "Send booking request"}{" "}
+          {!submitting && <Icon name="arrow" size={16} />}
         </button>
         <p className="booking-note">
           <Icon name="shield" size={13} /> No charge until {creator.name.split(" ")[0]} accepts

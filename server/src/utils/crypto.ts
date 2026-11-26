@@ -21,11 +21,14 @@ export function generateOtp() {
   return String(randomInt(100000, 999999));
 }
 
+/** Keep sessions alive ~5 weeks so the app does not ask for login every launch. */
+const SESSION_TTL = "35d";
+
 export async function signToken(payload: { sub: string; role: string; email: string }) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime(SESSION_TTL)
     .sign(secret);
 }
 

@@ -25,6 +25,13 @@ export const creators: Creator[] = [
     available: true,
     category: "influencer",
     tags: ["Fashion", "Beauty", "UGC"],
+    availability: {
+      workingDays: [1, 2, 3, 4, 5],
+      startTime: "09:00",
+      endTime: "18:00",
+      leadTime: "1 day",
+      sameDay: true,
+    },
   },
   {
     id: 2,
@@ -44,6 +51,13 @@ export const creators: Creator[] = [
     available: true,
     category: "influencer",
     tags: ["Travel", "Lifestyle", "Nearby"],
+    availability: {
+      workingDays: [1, 2, 3, 4, 5, 6],
+      startTime: "10:00",
+      endTime: "19:00",
+      leadTime: "3 days",
+      sameDay: true,
+    },
   },
   {
     id: 3,
@@ -63,6 +77,13 @@ export const creators: Creator[] = [
     available: true,
     category: "ugc",
     tags: ["UGC", "Wellness", "Fashion"],
+    availability: {
+      workingDays: [1, 2, 3, 4, 5],
+      startTime: "09:00",
+      endTime: "17:00",
+      leadTime: "3 days",
+      sameDay: false,
+    },
   },
   {
     id: 4,
@@ -82,6 +103,13 @@ export const creators: Creator[] = [
     available: false,
     category: "affiliate",
     tags: ["Beauty", "Video", "Affiliate"],
+    availability: {
+      workingDays: [2, 3, 4],
+      startTime: "11:00",
+      endTime: "16:00",
+      leadTime: "7 days",
+      sameDay: false,
+    },
   },
 ];
 

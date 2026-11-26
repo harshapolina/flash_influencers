@@ -1,37 +1,34 @@
-import { useEffect } from "react";
+import { useState } from "react";
 import { Icon } from "../../lib/icons";
-import type { Creator } from "../../types";
 import { StatusBar } from "../../components/ui/StatusBar";
-import { useAppStore } from "../../store/AppStore";
-
-const NICHES = ["For you", "Fashion", "UGC", "Nearby", "Available now"] as const;
+import type { AppFlow, Creator } from "../../types";
 
 export function ExploreScreen({
   creators: list,
   query,
   setQuery,
+  liked,
+  onLike,
   onCreator,
   onFilter,
+  onOpen,
 }: {
   creators: Creator[];
   query: string;
   setQuery: (s: string) => void;
+  liked?: number[];
+  onLike?: (id: number) => void;
   onCreator: (c: Creator) => void;
   onFilter: () => void;
+  onOpen?: (flow: AppFlow) => void;
+  onOpenFlow?: (flow: AppFlow) => void;
 }) {
-  const { state, toggleLike, setFilters, refreshCreators } = useAppStore();
+  const open = onOpen;
+  const likedIds = liked || [];
+  const like = onLike || (() => {});
 
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      void refreshCreators(query);
-    }, 200);
-    return () => window.clearTimeout(t);
-  }, [query, state.filters, refreshCreators]);
-  const activeFilters =
-    (state.filters.category !== "all" ? 1 : 0) +
-    (state.filters.availableOnly ? 1 : 0) +
-    (state.filters.city !== "All" ? 1 : 0);
-
+  const [activePill, setActivePill] = useState("For you");
+  const [sort, setSort] = useState("Best match");
   return (
     <div className="screen explore-screen">
       <StatusBar />
@@ -43,12 +40,11 @@ export function ExploreScreen({
           </h1>
         </div>
         <button
-          className={`round-button ${state.filters.savedOnly ? "active" : ""}`}
-          type="button"
-          onClick={() => setFilters({ savedOnly: !state.filters.savedOnly })}
-          aria-label="Show saved creators"
+          className="round-button"
+          onClick={() => open?.({ name: "saved-creators", role: "brand" })}
+          aria-label="Saved creators"
         >
-          <Icon name="bookmark" size={19} fill={state.filters.savedOnly} />
+          <Icon name="bookmark" size={19} />
         </button>
       </header>
       <div className="mobile-search">
@@ -58,48 +54,36 @@ export function ExploreScreen({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search creators or niches"
         />
-        <button type="button" onClick={onFilter}>
+        <button onClick={onFilter}>
           <Icon name="filter" size={18} />
-          <i>{Math.max(activeFilters, 1)}</i>
+          <i>3</i>
         </button>
       </div>
       <div className="pills">
-        {NICHES.map((niche) => (
+        {["For you", "Fashion", "UGC", "Nearby", "Available now"].map((item) => (
           <button
-            key={niche}
-            type="button"
-            className={state.filters.niche === niche ? "active" : ""}
-            onClick={() => setFilters({ niche })}
+            className={activePill === item ? "active" : ""}
+            onClick={() => setActivePill(item)}
+            key={item}
           >
-            {niche}
+            {item}
           </button>
         ))}
       </div>
       <div className="result-line">
-        <span>
-          {list.length
-            ? `${list.length.toLocaleString("en-IN")} creator${list.length === 1 ? "" : "s"}`
-            : "No creators"}
-        </span>
+        <span>{list.length ? "1,248 creators" : "No creators"}</span>
         <button
-          type="button"
           onClick={() =>
-            setFilters({
-              sort:
-                state.filters.sort === "match"
-                  ? "followers"
-                  : state.filters.sort === "followers"
-                    ? "price"
-                    : "match",
-            })
+            setSort((current) =>
+              current === "Best match"
+                ? "Engagement"
+                : current === "Engagement"
+                  ? "Price low–high"
+                  : "Best match",
+            )
           }
         >
-          {state.filters.sort === "match"
-            ? "Best match"
-            : state.filters.sort === "followers"
-              ? "Most followers"
-              : "Lowest price"}{" "}
-          <Icon name="chevron" size={12} />
+          {sort} <Icon name="chevron" size={12} />
         </button>
       </div>
       <div className="explore-grid">
@@ -112,18 +96,17 @@ export function ExploreScreen({
                 {c.match}%
               </span>
               <button
-                type="button"
-                className={state.likedIds.includes(c.id) ? "active" : ""}
+                className={likedIds.includes(c.id) ? "active" : ""}
                 onClick={(e) => {
                   e.stopPropagation();
-                  toggleLike(c.id);
+                  like(c.id);
                 }}
               >
-                <Icon name="heart" size={17} fill={state.likedIds.includes(c.id)} />
+                <Icon name="heart" size={17} fill={likedIds.includes(c.id)} />
               </button>
               <small>
                 <i />
-                {c.available ? "Available now" : "Busy this week"}
+                Available now
               </small>
             </div>
             <div className="explore-info" onClick={() => onCreator(c)}>
@@ -162,15 +145,7 @@ export function ExploreScreen({
           </span>
           <h3>No creators found</h3>
           <p>Try another name, niche, or city.</p>
-          <button
-            type="button"
-            onClick={() => {
-              setQuery("");
-              setFilters({ niche: "For you", savedOnly: false, category: "all", city: "All" });
-            }}
-          >
-            Clear search
-          </button>
+          <button onClick={() => setQuery("")}>Clear search</button>
         </div>
       )}
     </div>

@@ -12,6 +12,9 @@ function resolveApiBase() {
 
 const API_BASE = resolveApiBase();
 const TOKEN_KEY = "orbitly.token";
+const TOKEN_SAVED_AT_KEY = "orbitly.token.savedAt";
+/** Client-side max age (40 days). Server JWT is 35d. */
+const TOKEN_MAX_AGE_MS = 40 * 24 * 60 * 60 * 1000;
 
 export type ApiUser = {
   id: string;
@@ -28,12 +31,24 @@ export type ApiUser = {
 };
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (!token) return null;
+  const savedAt = Number(localStorage.getItem(TOKEN_SAVED_AT_KEY) || "0");
+  if (savedAt && Date.now() - savedAt > TOKEN_MAX_AGE_MS) {
+    setToken(null);
+    return null;
+  }
+  return token;
 }
 
 export function setToken(token: string | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(TOKEN_SAVED_AT_KEY, String(Date.now()));
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_SAVED_AT_KEY);
+  }
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -119,11 +134,38 @@ export const api = {
     request<{ likedIds: number[]; liked: boolean }>(`/creators/${id}/like`, { method: "POST" }),
   saveCreator: (id: number) =>
     request<{ savedIds: number[]; saved: boolean }>(`/creators/${id}/save`, { method: "POST" }),
+  myCreatorProfile: () =>
+    request<{ creator: import("../types").Creator }>("/creators/me"),
+  updateMyAvailability: (body: {
+    available?: boolean;
+    sameDay?: boolean;
+    leadTime?: string;
+    workingDays?: number[];
+    startTime?: string;
+    endTime?: string;
+  }) =>
+    request<{ creator: import("../types").Creator }>("/creators/me/availability", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   listCampaigns: (params: Record<string, string | boolean> = {}) => {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => qs.set(k, String(v)));
     return request<any>(`/campaigns?${qs.toString()}`);
   },
+  createCampaign: (body: {
+    title: string;
+    type?: string;
+    pay?: string;
+    deliverables?: string;
+    tags?: string[];
+    due?: string;
+    applyBy?: string;
+  }) =>
+    request<{ campaign: import("../types").BrandCampaign }>("/campaigns", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   saveCampaign: (id: string) =>
     request<{ savedCampaignIds: string[]; saved: boolean }>(`/campaigns/${id}/save`, {
       method: "POST",
@@ -141,7 +183,10 @@ export const api = {
     deliverable: string;
     price?: number;
     date: string;
+    time?: string;
     location: string;
+    bookingType?: import("../types").BookingType;
+    brief?: string;
     multiplier?: number;
   }) =>
     request<{ booking: import("../types").Booking }>("/bookings", {
@@ -149,9 +194,33 @@ export const api = {
       body: JSON.stringify(body),
     }),
   listBookings: () => request<{ bookings: import("../types").Booking[] }>("/bookings"),
+  updateBookingStatus: (id: string, status: "accepted" | "rejected" | "completed") =>
+    request<{ booking: import("../types").Booking }>(`/bookings/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  issueBookingStartOtp: (id: string) =>
+    request<{ booking: import("../types").Booking; code: string; expiresAt: string }>(
+      `/bookings/${id}/start-otp`,
+      { method: "POST" },
+    ),
+  verifyBookingStart: (id: string, code: string) =>
+    request<{ booking: import("../types").Booking }>(`/bookings/${id}/verify-start`, {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
   listMessages: (tab = "all") =>
     request<{ messages: import("../types").InboxMessage[]; unreadCount: number }>(
       `/messages?tab=${tab}`,
+    ),
+  listChatThread: (creatorId: number) =>
+    request<{
+      lines: { id: string; text: string; createdAt: string; mine: boolean }[];
+    }>(`/messages/thread/${creatorId}`),
+  sendChatMessage: (creatorId: number, text: string) =>
+    request<{ line: { id: string; text: string; createdAt: string; mine: boolean } }>(
+      `/messages/thread/${creatorId}`,
+      { method: "POST", body: JSON.stringify({ text }) },
     ),
   markMessageRead: (id: string) =>
     request<{ ok: boolean }>(`/messages/${id}/read`, { method: "POST" }),

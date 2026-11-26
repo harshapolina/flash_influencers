@@ -283,6 +283,10 @@ authRouter.post("/demo-login", async (req, res) => {
 
     if (!user) return fail(res, new Error("Unable to create demo user"), 500);
 
+    if (body.role === "creator") {
+      await store.linkCreatorUser(1, user.id);
+    }
+
     const token = await signToken({ sub: user.id, role: user.role, email: user.email });
     return ok(res, { token, user: publicUser(user) });
   } catch (error) {

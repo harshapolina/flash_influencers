@@ -58,7 +58,7 @@ Source: [Creator Marketing Platform](https://www.figma.com/make/dWMFZk1ZaZPqJFDw
 
 | Tab | Screen | File |
 |-----|--------|------|
-| Home | BrandHomeV2 — “Grow your brand with the right voices.” | `src/features/brand/BrandHomeV2.tsx` |
+| Home | BrandHomeV2 — Instant / Schedule search + deck | `src/features/brand/BrandHomeV2.tsx` |
 | Explore | Creator marketplace | `src/features/brand/ExploreScreen.tsx` |
 | Campaigns | Active / Applications / Completed | `src/features/brand/CampaignScreen.tsx` |
 | Inbox | Conversations | `src/features/brand/InboxScreen.tsx` |
@@ -70,7 +70,11 @@ Source: [Creator Marketing Platform](https://www.figma.com/make/dWMFZk1ZaZPqJFDw
 |---------|------|
 | CreatorDetail | Open a creator |
 | FilterSheet | Explore filters |
-| BookingSheet | Book creator → success |
+| BookingSheet | Instant or Schedule booking (3 steps) → success → Campaigns Applications |
+| CreatorSearchPreferences | Instant / Schedule search prefs sheet |
+| CreatorMatchLoader | Animated matching map |
+| InstantCreatorDeck | Swipe deck of nearby / available creators |
+| Creator Work | Booking requests Accept / Decline → Active / Completed |
 
 ---
 
