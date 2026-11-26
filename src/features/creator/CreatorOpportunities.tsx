@@ -122,6 +122,9 @@ export function CreatorOpportunitiesScreen({
   const [brandRequest, setBrandRequest] = useState<BrandRequestCard | null>(DEMO_BRAND_REQUEST);
   const [requestStatus, setRequestStatus] = useState<RequestStatus>("pending");
   const [requestBusy, setRequestBusy] = useState(false);
+  const [startOtp, setStartOtp] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpError, setOtpError] = useState("");
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState("Spam or repeated requests");
   const [reportSent, setReportSent] = useState(false);
@@ -137,10 +140,15 @@ export function CreatorOpportunitiesScreen({
       .listBookings()
       .then((data) => {
         if (!alive) return;
-        const pending = (data.bookings || []).filter((b) => b.status === "pending");
+        const bookings = data.bookings || [];
+        const pending = bookings.filter((b) => b.status === "pending");
+        const awaitingStart = bookings.filter((b) => b.status === "accepted");
         if (pending.length) {
           setBrandRequest(bookingToRequest(pending[0]));
           setRequestStatus("pending");
+        } else if (awaitingStart.length) {
+          setBrandRequest(bookingToRequest(awaitingStart[0]));
+          setRequestStatus("accepted");
         } else {
           setBrandRequest(DEMO_BRAND_REQUEST);
           setRequestStatus("pending");
@@ -392,26 +400,81 @@ export function CreatorOpportunitiesScreen({
             </footer>
           )}
           {requestStatus === "accepted" && (
-            <div className="incoming-accepted">
-              <span>
-                <Icon name="check" size={14} />
-              </span>
-              <div>
-                <strong>Request accepted</strong>
-                <small>Chat access is now available to you and the brand.</small>
+            <div className="incoming-accepted" style={{ flexDirection: "column", alignItems: "stretch", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span>
+                  <Icon name="check" size={14} />
+                </span>
+                <div style={{ flex: 1 }}>
+                  <strong>Request accepted</strong>
+                  <small>Ask the brand for the start OTP, then enter it below to begin.</small>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (brandRequest.threadId && onChat) {
+                      onChat(brandRequest.threadId);
+                      return;
+                    }
+                    showToast("Open Work to message the brand");
+                  }}
+                >
+                  <Icon name="message" size={14} /> Chat
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (brandRequest.threadId && onChat) {
-                    onChat(brandRequest.threadId);
-                    return;
-                  }
-                  showToast("Open Work to message the brand");
-                }}
-              >
-                <Icon name="message" size={14} /> Chat
-              </button>
+              {brandRequest.bookingId && !brandRequest.isDemo ? (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="Start OTP"
+                    value={startOtp}
+                    onChange={(e) => {
+                      setStartOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
+                      setOtpError("");
+                    }}
+                    style={{
+                      flex: 1,
+                      minWidth: 120,
+                      height: 40,
+                      borderRadius: 10,
+                      border: "1px solid #cfd5cb",
+                      padding: "0 12px",
+                      letterSpacing: 3,
+                      fontWeight: 700,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="incoming-accept"
+                    disabled={otpBusy || startOtp.length < 4}
+                    onClick={() => {
+                      if (!brandRequest.bookingId) return;
+                      setOtpBusy(true);
+                      setOtpError("");
+                      void api
+                        .verifyBookingStart(brandRequest.bookingId, startOtp)
+                        .then(() => {
+                          showToast("Shoot started");
+                          setRequestStatus("hidden");
+                          setStartOtp("");
+                        })
+                        .catch((err) => {
+                          setOtpError(err instanceof Error ? err.message : "Invalid OTP");
+                        })
+                        .finally(() => setOtpBusy(false));
+                    }}
+                  >
+                    {otpBusy ? "Verifying…" : "Start shoot"}
+                  </button>
+                  {otpError ? (
+                    <p className="booking-error" style={{ width: "100%", margin: 0 }}>
+                      {otpError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           )}
           {requestStatus === "declined" && (

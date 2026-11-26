@@ -6,6 +6,7 @@ import { CreatorEarningsScreen } from "./CreatorEarnings";
 import { CreatorNotifications } from "./CreatorNotifications";
 import { CreatorInbox } from "./CreatorInbox";
 import { CreatorChat } from "./CreatorChat";
+import { InstantBookingPopup } from "./InstantBookingPopup";
 import {
   CreatorProfilePage,
   type CreatorProfilePageId,
@@ -133,6 +134,7 @@ export function CreatorApp() {
           />
         )}
         <CreatorBottomNav active={tab} onChange={setTab} />
+        <InstantBookingPopup onOpenWork={() => setTab("Work")} />
       </div>
     </div>
   );

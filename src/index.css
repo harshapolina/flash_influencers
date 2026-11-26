@@ -14600,6 +14600,155 @@ button {
   font-size: 8px;
   text-decoration: underline;
 }
+
+/* Instant booking popup — centered vertical stack */
+.request-status-popup.instant-booking-popup {
+  --ibp-pad-x: 24px;
+  --ibp-stack: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(430px, 100%);
+  max-width: 100%;
+  padding: 28px var(--ibp-pad-x) max(36px, calc(var(--safe-bottom, env(safe-area-inset-bottom)) + 14px));
+  text-align: center;
+  box-sizing: border-box;
+}
+.request-status-popup.instant-booking-popup .request-popup-close {
+  top: 18px;
+  right: 18px;
+}
+.ibp-icon {
+  width: 60px;
+  height: 60px;
+  margin: 4px auto 0;
+  border-radius: 18px;
+  background: #1e231f;
+  color: #dfff65;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  box-shadow: 0 10px 24px rgba(26, 34, 27, 0.16);
+  flex-shrink: 0;
+}
+.ibp-icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+.ibp-eyebrow {
+  display: block;
+  width: 100%;
+  max-width: var(--ibp-stack);
+  margin: 18px 0 0;
+  color: #6a7e40;
+  font: 800 10px/1.2 "Manrope", sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+}
+.ibp-title {
+  margin: 10px 0 0;
+  max-width: var(--ibp-stack);
+  color: #171a17;
+  font: 700 22px/1.22 "Manrope", sans-serif;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  text-align: center;
+}
+.request-status-popup.instant-booking-popup .ibp-amount {
+  margin: 18px 0 0;
+  max-width: none;
+  color: #171a17;
+  font: 800 36px/1 "Manrope", sans-serif;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+}
+.request-status-popup.instant-booking-popup .ibp-amount-label {
+  margin-top: 6px;
+  color: #6b7466;
+  font: 700 11px/1.2 "Manrope", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.request-status-popup.instant-booking-popup .ibp-facts {
+  width: 100%;
+  max-width: var(--ibp-stack);
+  margin: 16px auto 0;
+  padding: 2px 16px;
+  border-radius: 16px;
+  background: #f0f2ec;
+  box-sizing: border-box;
+  text-align: left;
+}
+.request-status-popup.instant-booking-popup .ibp-fact {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 13px 0;
+  border-top: 1px solid #e1e5da;
+}
+.request-status-popup.instant-booking-popup .ibp-fact:first-child {
+  border-top: 0;
+}
+.request-status-popup.instant-booking-popup .ibp-fact dt {
+  margin: 0;
+  color: #6b7466;
+  font: 700 11px/1.35 "Manrope", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.request-status-popup.instant-booking-popup .ibp-fact dd {
+  margin: 0;
+  color: #171a17;
+  font: 600 15px/1.4 "Manrope", sans-serif;
+  word-break: break-word;
+}
+.request-status-popup.instant-booking-popup .ibp-fact-brief dd {
+  font-weight: 500;
+  color: #3d453c;
+}
+.ibp-error {
+  width: 100%;
+  max-width: var(--ibp-stack);
+  margin: 12px auto 0;
+}
+.ibp-actions {
+  width: 100%;
+  max-width: var(--ibp-stack);
+  margin: 20px auto 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ibp-actions > button {
+  height: 48px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 13px/1 "Manrope", sans-serif;
+}
+.ibp-actions > button:disabled {
+  opacity: 0.65;
+}
+.ibp-secondary {
+  margin-top: 12px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: 600 12px/1 "Manrope", sans-serif;
+  text-decoration: none;
+  color: #5f675f;
+}
+.ibp-secondary:hover,
+.ibp-secondary:focus-visible {
+  color: #171a17;
+  text-decoration: underline;
+}
 .request-demo-note {
   display: block;
   color: #a3a8a1 !important;

@@ -12,6 +12,10 @@ function resolveApiBase() {
 }
 
 const API_BASE = resolveApiBase();
+/** Native: try configured base, then localhost (adb reverse) as backup. */
+const API_BASES = Capacitor.isNativePlatform()
+  ? Array.from(new Set([API_BASE, "http://localhost:3001/api"].filter(Boolean)))
+  : [API_BASE];
 const TOKEN_KEY = "orbitly.token";
 const TOKEN_SAVED_AT_KEY = "orbitly.token.savedAt";
 /** Client-side max age (40 days). Server JWT is 35d. */
@@ -58,12 +62,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  } catch {
+  let res: Response | null = null;
+  for (const base of API_BASES) {
+    try {
+      res = await fetch(`${base}${path}`, { ...options, headers });
+      break;
+    } catch {
+      /* try next base */
+    }
+  }
+  if (!res) {
     throw new Error(
-      "Cannot reach Orbitly API. Start the server (`npm --prefix server run dev`) and keep this device connected.",
+      "Cannot reach Orbitly API. Start the server (`npm --prefix server run dev`) and keep Wi‑Fi on the same network (or USB with adb reverse).",
     );
   }
   const data = await res.json().catch(() => ({}));

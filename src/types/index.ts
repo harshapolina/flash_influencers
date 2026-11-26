@@ -162,7 +162,6 @@ export type Booking = {
   mode?: "instant" | "schedule";
   brief?: string;
   status: "pending" | "accepted" | "rejected" | "in_progress" | "completed" | "declined";
-  brandName?: string;
   creatorName?: string;
   campaignId?: string;
   workItemId?: string;

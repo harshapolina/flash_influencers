@@ -170,10 +170,11 @@ export function InboxScreen({
               category: "campaigns" as const,
             }))
         ).map((msg) => {
+          const resolvedId = msg.creatorId ?? 0;
           const creator =
-            creatorPool.find((c) => c.id === msg.creatorId) ||
+            creatorPool.find((c) => c.id === resolvedId) ||
             ({
-              id: msg.creatorId,
+              id: resolvedId,
               name: msg.creatorName || "Creator",
               image: msg.creatorImage || "",
               handle: "",
@@ -196,6 +197,7 @@ export function InboxScreen({
               key={msg.id}
               type="button"
               onClick={() => {
+                if (!resolvedId) return;
                 setActiveCreator(creator);
                 if (msg.unread > 0) {
                   void api.markMessageRead(msg.id).then(() => {
