@@ -65,7 +65,12 @@ export function CreatorChat({
     <div className="screen creator-overlay-screen creator-chat-screen">
       <StatusBar />
       <header className="creator-overlay-head">
-        <button className="round-button" type="button" onClick={onBack}>
+        <button
+          className="round-button work-back-btn"
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+        >
           <Icon name="chevron" size={18} />
         </button>
         <div>

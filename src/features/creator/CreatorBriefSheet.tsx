@@ -63,12 +63,12 @@ export function CreatorBriefSheet({
     `${campaign.brand} is looking for creators to deliver ${campaign.type.toLowerCase()}. Share an authentic take that fits your audience, keep brand mentions natural, and submit drafts before the apply-by date.`;
 
   return (
-    <div className="sheet-layer" onClick={onClose}>
+    <div className="sheet-layer creator-brief-layer" onClick={onClose}>
       <div className="bottom-sheet creator-brief-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" />
-        <header>
+        <header className="brief-sheet-head">
           <div>
-            <span>
+            <span className="brief-brand-line">
               {campaign.brand} ·{" "}
               {isBooking
                 ? campaign.bookingMode === "instant"
@@ -78,7 +78,7 @@ export function CreatorBriefSheet({
             </span>
             <h2>{campaign.title}</h2>
           </div>
-          <button type="button" onClick={onClose}>
+          <button type="button" aria-label="Close brief" onClick={onClose}>
             <Icon name="close" size={16} />
           </button>
         </header>
@@ -125,7 +125,9 @@ export function CreatorBriefSheet({
             <li>Usage window: 90 days</li>
           </ul>
         </section>
-        {notice && <p className={`flow-error ${/Could not|fail/i.test(notice) ? "" : "flow-success"}`}>{notice}</p>}
+        {notice && (
+          <p className={/Could not|fail/i.test(notice) ? "flow-error" : "flow-success"}>{notice}</p>
+        )}
         <footer className={`brief-actions ${canMessage ? "brief-actions-stack" : ""}`}>
           <button type="button" className="brief-save" disabled={saveBusy} onClick={() => void save()}>
             <Icon name="bookmark" size={16} fill={saved} />
@@ -147,7 +149,7 @@ export function CreatorBriefSheet({
                 ? "Applied"
                 : busy
                   ? "Sending…"
-                  : "Apply now"}{" "}
+                  : "Apply now"}
             <Icon name="arrow" size={15} />
           </button>
           {canMessage && (

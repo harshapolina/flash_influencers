@@ -26,12 +26,12 @@ export function OpportunityFilterSheet({
 
   return (
     <div className="sheet-layer" onClick={onClose}>
-      <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="bottom-sheet opportunity-filter-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" />
         <header>
           <h2>Filters</h2>
-          <button type="button" onClick={onClose}>
-            <Icon name="close" />
+          <button type="button" aria-label="Close filters" onClick={onClose}>
+            <Icon name="close" size={16} />
           </button>
         </header>
 

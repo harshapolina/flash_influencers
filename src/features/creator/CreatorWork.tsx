@@ -283,13 +283,17 @@ export function CreatorWorkScreen({
     }
   };
 
+  const openItem =
+    (openId && (list.find((item) => item.id === openId) || allItems.find((item) => item.id === openId))) ||
+    null;
+
   if (calendarOpen) {
     return (
       <div className="screen creator-work-screen work-calendar-screen">
         <StatusBar />
-        <header className="creator-overlay-head">
+        <header className="creator-overlay-head work-calendar-head">
           <button
-            className="round-button"
+            className="round-button work-back-btn"
             type="button"
             aria-label="Back to campaigns"
             onClick={() => setCalendarOpen(false)}
@@ -301,9 +305,9 @@ export function CreatorWorkScreen({
             <h1>Deadlines</h1>
           </div>
           <button
-            className="round-button active"
+            className="round-button work-today-btn"
             type="button"
-            aria-label="Today"
+            aria-label="Jump to today"
             onClick={() => {
               setMonthCursor(new Date(today.getFullYear(), today.getMonth(), 1));
               setSelectedDay(today);
@@ -588,69 +592,12 @@ export function CreatorWorkScreen({
                 <button
                   type="button"
                   className="work-open-btn"
-                  onClick={() => setOpenId(openId === item.id ? null : item.id)}
+                  onClick={() => setOpenId(item.id)}
                 >
-                  {openId === item.id ? "Hide details" : "Open campaign"}
+                  Open campaign
                   <Icon name="arrow" size={13} />
                 </button>
               </footer>
-              {openId === item.id && (
-                <div className="work-detail-panel">
-                  <p>
-                    {item.brief ||
-                      `${item.brand} · ${item.title}. Status ${item.status}, ${item.progress}% complete, due ${item.due}.`}
-                  </p>
-                  {item.location && (
-                    <small>
-                      <Icon name="pin" size={12} /> {item.location}
-                      {item.mode ? ` · ${item.mode === "instant" ? "Instant" : "Scheduled"}` : ""}
-                    </small>
-                  )}
-                  <div className="work-detail-actions">
-                    {item.needsAccept && (
-                      <>
-                        <button
-                          type="button"
-                          className="flow-primary"
-                          disabled={busyId === item.id}
-                          onClick={() => void accept(item)}
-                        >
-                          {busyId === item.id ? "Confirming…" : "OK to work"}
-                        </button>
-                        {item.bookingId && (
-                          <button
-                            type="button"
-                            className="work-chat-btn work-decline-btn"
-                            disabled={busyId === item.id}
-                            onClick={() => void decline(item)}
-                          >
-                            Decline invite
-                          </button>
-                        )}
-                      </>
-                    )}
-                    {item.threadId && (
-                      <button
-                        type="button"
-                        className="work-chat-btn"
-                        onClick={() => onChat?.(item.threadId!)}
-                      >
-                        <Icon name="message" size={14} /> Message brand
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="work-chat-btn"
-                      onClick={() => {
-                        const due = parseDue(item.due, today);
-                        void openCalendar(due || today);
-                      }}
-                    >
-                      <Icon name="calendar" size={14} /> View on calendar
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </article>
         ))}
@@ -664,6 +611,121 @@ export function CreatorWorkScreen({
           </div>
         )}
       </div>
+
+      {openItem && (
+        <div className="sheet-layer work-detail-layer" onClick={() => setOpenId(null)}>
+          <div
+            className="bottom-sheet work-detail-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sheet-handle" />
+            <header className="brief-sheet-head">
+              <div>
+                <span className="brief-brand-line">
+                  {openItem.brand} ·{" "}
+                  {openItem.needsAccept
+                    ? "NEEDS OK"
+                    : openItem.bucket === "applications"
+                      ? "APPLICATION"
+                      : openItem.bucket === "completed"
+                        ? "COMPLETED"
+                        : "IN PROGRESS"}
+                </span>
+                <h2>{openItem.title}</h2>
+              </div>
+              <button type="button" aria-label="Close campaign" onClick={() => setOpenId(null)}>
+                <Icon name="close" size={16} />
+              </button>
+            </header>
+
+            <div className="brief-hero">
+              <span className="brief-mark">{openItem.brand.slice(0, 2).toUpperCase()}</span>
+              <div>
+                <small>CREATOR PAY</small>
+                <strong>{openItem.pay || "—"}</strong>
+              </div>
+              <div>
+                <small>PROGRESS</small>
+                <strong>{openItem.progress}%</strong>
+              </div>
+            </div>
+
+            <div className="brief-meta">
+              <span>
+                <Icon name="calendar" size={13} /> Due {openItem.due}
+              </span>
+              {openItem.location && (
+                <span>
+                  <Icon name="pin" size={13} /> {openItem.location}
+                </span>
+              )}
+              {openItem.mode && (
+                <span>{openItem.mode === "instant" ? "Instant" : "Scheduled"}</span>
+              )}
+            </div>
+
+            <section className="brief-section">
+              <h3>Status</h3>
+              <p>{openItem.status}</p>
+            </section>
+            <section className="brief-section">
+              <h3>Campaign notes</h3>
+              <p>
+                {openItem.brief ||
+                  `${openItem.brand} · ${openItem.title}. Keep deliverables on track before ${openItem.due}.`}
+              </p>
+            </section>
+
+            <footer className="work-detail-actions">
+              {openItem.needsAccept && (
+                <>
+                  <button
+                    type="button"
+                    className="flow-primary"
+                    disabled={busyId === openItem.id}
+                    onClick={() => void accept(openItem)}
+                  >
+                    {busyId === openItem.id ? "Confirming…" : "OK to work"}
+                  </button>
+                  {openItem.bookingId && (
+                    <button
+                      type="button"
+                      className="work-chat-btn work-decline-btn"
+                      disabled={busyId === openItem.id}
+                      onClick={() => void decline(openItem)}
+                    >
+                      Decline invite
+                    </button>
+                  )}
+                </>
+              )}
+              {openItem.threadId && (
+                <button
+                  type="button"
+                  className="work-chat-btn"
+                  onClick={() => {
+                    onChat?.(openItem.threadId!);
+                    setOpenId(null);
+                  }}
+                >
+                  <Icon name="message" size={14} /> Message brand
+                </button>
+              )}
+              <button
+                type="button"
+                className="work-chat-btn"
+                onClick={() => {
+                  const due = parseDue(openItem.due, today);
+                  setOpenId(null);
+                  void openCalendar(due || today);
+                }}
+              >
+                <Icon name="calendar" size={14} /> View on calendar
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

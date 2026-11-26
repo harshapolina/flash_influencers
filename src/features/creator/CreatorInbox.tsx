@@ -41,10 +41,15 @@ export function CreatorInbox({
   });
 
   return (
-    <div className="screen creator-overlay-screen">
+    <div className="screen creator-overlay-screen creator-inbox-screen">
       <StatusBar />
       <header className="creator-overlay-head">
-        <button className="round-button" type="button" onClick={onBack}>
+        <button
+          className="round-button work-back-btn"
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+        >
           <Icon name="chevron" size={18} />
         </button>
         <div>
@@ -54,13 +59,14 @@ export function CreatorInbox({
         <button
           className={`round-button ${searchOpen ? "active" : ""}`}
           type="button"
+          aria-label="Search messages"
           onClick={() => setSearchOpen((v) => !v)}
         >
           <Icon name="search" size={17} />
         </button>
       </header>
       {searchOpen && (
-        <div className="mobile-search creator-search" style={{ margin: "0 16px 8px" }}>
+        <div className="mobile-search creator-search creator-inbox-search">
           <Icon name="search" size={18} />
           <input
             value={query}
@@ -70,7 +76,7 @@ export function CreatorInbox({
           />
         </div>
       )}
-      <div className="pills creator-pills">
+      <div className="pills creator-pills creator-inbox-pills">
         <button type="button" className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}>
           All
         </button>
@@ -79,7 +85,7 @@ export function CreatorInbox({
           className={tab === "unread" ? "active" : ""}
           onClick={() => setTab("unread")}
         >
-          Unread {unreadCount || ""}
+          Unread{unreadCount ? ` · ${unreadCount}` : ""}
         </button>
         <button
           type="button"
@@ -92,7 +98,7 @@ export function CreatorInbox({
       <div className="messages creator-messages">
         {filtered.map((msg) => (
           <button
-            className="message-row"
+            className={`message-row ${msg.unread > 0 ? "is-unread" : ""}`}
             type="button"
             key={msg.id}
             onClick={() => {
@@ -119,17 +125,21 @@ export function CreatorInbox({
               )}
               {msg.unread > 0 && <i />}
             </div>
-            <div>
+            <div className="message-copy">
               <strong>{msg.creatorName || msg.campaign || "Brand"}</strong>
               <p>{msg.preview}</p>
-              <small>{msg.campaign || (msg.category === "campaigns" ? "Campaign thread" : "General")}</small>
+              <small>
+                {msg.campaign || (msg.category === "campaigns" ? "Campaign thread" : "General")}
+              </small>
             </div>
-            <span>{msg.time}</span>
-            {msg.unread > 0 && <b>{msg.unread}</b>}
+            <div className="message-meta">
+              <span>{msg.time}</span>
+              {msg.unread > 0 && <b>{msg.unread}</b>}
+            </div>
           </button>
         ))}
         {!filtered.length && (
-          <div className="empty" style={{ paddingTop: 48 }}>
+          <div className="empty-inline creator-inbox-empty">
             <h3>No messages yet</h3>
             <p>When a brand books you, the chat thread opens here.</p>
           </div>

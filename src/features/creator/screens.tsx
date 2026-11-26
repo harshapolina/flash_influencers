@@ -32,6 +32,19 @@ function profileStrength(profile?: Record<string, unknown>) {
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
 
+function greetingLabel(date = new Date()) {
+  const hour = date.getHours();
+  if (hour < 12) return "GOOD MORNING";
+  if (hour < 17) return "GOOD AFTERNOON";
+  return "GOOD EVENING";
+}
+
+function brandGlyph(campaign: Campaign & { icon?: string }) {
+  if (campaign.icon) return campaign.icon;
+  const brand = String(campaign.brand || "OR").trim();
+  return brand.slice(0, 2).toUpperCase();
+}
+
 export function CreatorHomeScreen({
   onExplore,
   onOpenCampaign,
@@ -52,36 +65,69 @@ export function CreatorHomeScreen({
   onProfile?: () => void;
 }) {
   const { state, refreshSession } = useAppStore();
-  const [campaigns, setCampaigns] = useState<Array<Campaign & { icon?: string; type?: string; pay?: string; match?: number }>>([]);
+  const [campaigns, setCampaigns] = useState<
+    Array<Campaign & { icon?: string; type?: string; pay?: string; match?: number }>
+  >([]);
   const [work, setWork] = useState<WorkItem[]>([]);
-  const [earnings, setEarnings] = useState<{ available: number; earnedThisMonth: number } | null>(null);
+  const [earnings, setEarnings] = useState<{ available: number; earnedThisMonth: number } | null>(
+    null,
+  );
+  const [instantOn, setInstantOn] = useState(false);
+  const [availabilityBusy, setAvailabilityBusy] = useState(false);
 
   useEffect(() => {
     api.listCampaigns({}).then((data) => setCampaigns(data.campaigns || [])).catch(() => {});
     api.myWork().then((data) => setWork(data.items || [])).catch(() => {});
     api.earnings().then((data) => setEarnings(data)).catch(() => {});
+    api
+      .myCreatorProfile()
+      .then(({ creator }) => {
+        setInstantOn(Boolean(creator.available && (creator.availability?.sameDay ?? false)));
+      })
+      .catch(() => {});
     refreshSession().catch(() => {});
   }, [refreshSession]);
+
+  const toggleInstant = async () => {
+    if (availabilityBusy) return;
+    const next = !instantOn;
+    setInstantOn(next);
+    setAvailabilityBusy(true);
+    try {
+      await api.updateMyAvailability({ available: next, sameDay: next });
+    } catch {
+      setInstantOn(!next);
+    } finally {
+      setAvailabilityBusy(false);
+    }
+  };
 
   const accounts = socialAccounts(state.user?.profile);
   const userName = state.user?.name || "Creator";
   const avatar = accounts.find((account) => account.avatar)?.avatar || state.user?.avatarUrl || "";
   const active = work.find((item) => item.bucket === "active");
+  const activeCount = work.filter((item) => item.bucket === "active").length;
   const available = earnings?.available ?? 0;
   const month = earnings?.earnedThisMonth ?? 0;
   const strength = profileStrength(state.user?.profile);
   const engagement = averageViewRate(accounts);
+  const totalViews = accounts.reduce((sum, account) => sum + (account.views || 0), 0);
+  const matched = campaigns.slice(0, 8);
 
   return (
     <div className="screen creator-home-screen">
       <StatusBar />
       <header className="creator-home-head">
-        <div className="creator-head-avatar">
-          {avatar ? <img src={avatar} alt={userName} /> : <Icon name="user" size={22} />}
-          <i />
-        </div>
+        <button
+          className="round-button"
+          type="button"
+          onClick={onInbox}
+          aria-label="Messages"
+        >
+          <Icon name="message" size={18} />
+        </button>
         <div>
-          <small>GOOD MORNING</small>
+          <small>{greetingLabel()}</small>
           <strong>
             {userName}{" "}
             <span>
@@ -89,9 +135,23 @@ export function CreatorHomeScreen({
             </span>
           </strong>
         </div>
-        <button className="round-button" type="button" onClick={onNotifications}>
+        <button
+          className="round-button"
+          type="button"
+          onClick={onNotifications}
+          aria-label="Notifications"
+        >
           <Icon name="bell" size={19} />
-          {work.length > 0 && <i />}
+          {(work.length > 0 || campaigns.length > 0) && <i />}
+        </button>
+        <button
+          type="button"
+          className="creator-head-avatar"
+          onClick={onProfile}
+          aria-label="Open profile"
+        >
+          {avatar ? <img src={avatar} alt={userName} /> : <Icon name="user" size={22} />}
+          <i />
         </button>
       </header>
 
@@ -109,92 +169,134 @@ export function CreatorHomeScreen({
           </button>
         </div>
         <div className="wallet-visual">
-          {avatar ? <img src={avatar} alt="" /> : <Icon name="user" size={28} />}
+          {avatar ? (
+            <img src={avatar} alt="" />
+          ) : (
+            <div className="wallet-avatar-fallback">
+              <Icon name="user" size={28} />
+            </div>
+          )}
+          <span className="wallet-float wf-one">
+            <Icon name="trending" size={11} /> +18%
+          </span>
+          <span className="wallet-float wf-two">
+            <Icon name="check" size={10} /> Paid
+          </span>
           <i className="wallet-orbit" />
         </div>
       </section>
 
-      <section className="creator-profile-strength">
-        <div className="strength-ring">
+      <div className="availability-list creator-home-availability">
+        <button type="button" onClick={() => void toggleInstant()} disabled={availabilityBusy}>
+          <span>
+            <strong>Instant availability</strong>
+            <small>{instantOn ? "Brands can book you today" : "Hidden from Available now"}</small>
+          </span>
+          <i className={instantOn ? "on" : ""}>
+            <b />
+          </i>
+        </button>
+      </div>
+
+      <button
+        type="button"
+        className="creator-profile-strength"
+        onClick={onProfile}
+        aria-label="Improve profile"
+      >
+        <div
+          className="strength-ring"
+          style={{
+            background: `conic-gradient(#1b1e1b 0 ${strength}%, #e2e5df ${strength}%)`,
+          }}
+        >
           <strong>{strength}</strong>
           <small>%</small>
         </div>
-        <div>
+        <div className="strength-copy">
           <span>PROFILE STRENGTH</span>
-          <strong>{strength === 100 ? "Profile complete" : "Finish the remaining profile steps"}</strong>
+          <strong>
+            {strength === 100
+              ? "Profile complete"
+              : strength >= 70
+                ? "Your profile stands out"
+                : "Complete your profile"}
+          </strong>
           <small>
             {strength === 100
-              ? "Brands can see your connected accounts and payout details."
-              : "Location, social accounts, portfolio, pricing, availability, and payout each raise this."}
+              ? "Ready for brand bookings"
+              : strength >= 70
+                ? "One more step to 100%"
+                : "Add socials, pricing & payout"}
           </small>
         </div>
-        <button type="button" onClick={onProfile}>
+        <span className="strength-chevron">
           <Icon name="chevron" size={15} />
-        </button>
-      </section>
+        </span>
+      </button>
 
       <div className="creator-kpis">
-        <div>
+        <button type="button" onClick={onWork}>
           <span className="kpi-icon lime">
             <Icon name="briefcase" size={16} />
           </span>
-          <strong>{work.filter((item) => item.bucket === "active").length}</strong>
-          <small>Active work</small>
-        </div>
-        <div>
+          <strong>{activeCount}</strong>
+          <small>Active</small>
+        </button>
+        <button type="button" onClick={onExplore}>
           <span className="kpi-icon purple">
             <Icon name="search" size={16} />
           </span>
           <strong>{campaigns.length}</strong>
-          <small>New matches</small>
-        </div>
-        <div>
+          <small>Matches</small>
+        </button>
+        <button type="button" onClick={onAnalytics}>
           <span className="kpi-icon peach">
             <Icon name="trending" size={16} />
           </span>
           <strong>{engagement}</strong>
-          <small>View rate</small>
-        </div>
+          <small>Views</small>
+        </button>
       </div>
 
       <SectionTitle title="Matched for you" action="See all" onClick={onExplore} />
       <div className="opportunity-carousel">
-        {campaigns.map((campaign, index) => (
+        {matched.map((campaign, index) => (
           <button
-            className={`opportunity-tile ot-${index}`}
+            className={`opportunity-tile ot-${index % 3}`}
             type="button"
-            onClick={() =>
-              onOpenCampaign ? onOpenCampaign(campaign.id) : onExplore()
-            }
+            onClick={() => (onOpenCampaign ? onOpenCampaign(campaign.id) : onExplore())}
             key={campaign.id || campaign.title}
           >
             <div className="opportunity-tile-top">
-              <span className="brand-glyph">{campaign.icon}</span>
+              <span className="brand-glyph">{brandGlyph(campaign)}</span>
               <span className="match-score">
                 <Icon name="sparkles" size={10} />
-                {typeof campaign.match === "number" ? `${campaign.match}% match` : campaign.type || "Open"}
+                {typeof campaign.match === "number"
+                  ? `${campaign.match}% match`
+                  : campaign.type || "Open"}
               </span>
             </div>
             <div className="opportunity-art">
               {index === 0 ? (
                 <img
                   src="https://images.unsplash.com/photo-1695408247109-3bf125ad0538?crop=faces&fit=crop&w=500&h=360&q=85"
-                  alt="Creator campaign"
+                  alt=""
                 />
               ) : (
                 <>
                   <i />
                   <i />
-                  <strong>{campaign.icon}</strong>
+                  <strong>{brandGlyph(campaign)}</strong>
                 </>
               )}
             </div>
             <div className="opportunity-tile-copy">
               <small>{campaign.brand}</small>
               <strong>{campaign.title}</strong>
-              <span>{campaign.type}</span>
+              <span>{campaign.type || campaign.bookingMode || "Campaign"}</span>
               <footer>
-                <b>{campaign.pay}</b>
+                <b>{campaign.pay || "Paid"}</b>
                 <i>
                   <Icon name="arrow" size={13} />
                 </i>
@@ -202,6 +304,21 @@ export function CreatorHomeScreen({
             </div>
           </button>
         ))}
+        {!matched.length && (
+          <button type="button" className="opportunity-tile opportunity-empty-tile" onClick={onExplore}>
+            <div className="opportunity-tile-copy">
+              <small>NO MATCHES YET</small>
+              <strong>Explore open campaigns</strong>
+              <span>We’ll surface better fits as your profile grows.</span>
+              <footer>
+                <b>Browse</b>
+                <i>
+                  <Icon name="arrow" size={13} />
+                </i>
+              </footer>
+            </div>
+          </button>
+        )}
       </div>
 
       <SectionTitle title="Active campaign" action="View work" onClick={onWork} />
@@ -210,14 +327,22 @@ export function CreatorHomeScreen({
         className="creator-active-work"
         onClick={() => (active ? onWork?.() : onExplore())}
       >
-        <div className="active-work-brand">{(active?.brand || "—").slice(0, 2).toUpperCase()}</div>
+        <div className="active-work-brand">
+          {(active?.brand || "OR").slice(0, 2).toUpperCase()}
+        </div>
         <div className="active-work-copy">
           <span>{active ? `${active.brand} · ${active.title}` : "NO ACTIVE WORK"}</span>
           <strong>{active ? active.status : "Apply to a campaign"}</strong>
           <div className="work-progress">
             <i style={{ width: `${active?.progress ?? 0}%` }} />
           </div>
-          <small>{active ? `Due ${active.due}` : "Your work list is empty"}</small>
+          <small>
+            {active
+              ? active.due
+                ? `Due ${active.due}`
+                : `${active.progress || 0}% complete`
+              : "Your work list is empty"}
+          </small>
         </div>
         <span className="active-work-chevron">
           <Icon name="chevron" size={15} />
@@ -225,27 +350,22 @@ export function CreatorHomeScreen({
       </button>
 
       <SectionTitle title="This month" action="Analytics" onClick={onAnalytics} />
-      <section className="creator-quick-actions">
-        <button type="button" onClick={onInbox}>
-          <Icon name="message" size={16} />
-          Messages
-        </button>
-        <button type="button" onClick={onNotifications}>
-          <Icon name="bell" size={16} />
-          Alerts
-        </button>
-        <button type="button" onClick={onAnalytics}>
-          <Icon name="trending" size={16} />
-          Analytics
-        </button>
-      </section>
-      <section className="creator-performance-card">
+      <button type="button" className="creator-performance-card" onClick={onAnalytics}>
         <div>
           <span>CONTENT REACH</span>
-          <strong>{formatSocialCount(accounts.reduce((sum, account) => sum + (account.views || 0), 0))}</strong>
-          <small>Average views from connected accounts</small>
+          <strong>{formatSocialCount(totalViews)}</strong>
+          <small>
+            {accounts.length ? (
+              <>
+                <b>{engagement}</b> avg view rate across {accounts.length} channel
+                {accounts.length === 1 ? "" : "s"}
+              </>
+            ) : (
+              "Connect Instagram or YouTube to track reach"
+            )}
+          </small>
         </div>
-        <div className="creator-mini-chart">
+        <div className="creator-mini-chart" aria-hidden="true">
           {[32, 48, 40, 66, 52, 81, 74, 92].map((height, index) => (
             <i
               style={{ height: `${height}%` }}
@@ -254,7 +374,7 @@ export function CreatorHomeScreen({
             />
           ))}
         </div>
-      </section>
+      </button>
     </div>
   );
 }
@@ -341,6 +461,11 @@ export function CreatorAppProfile({
       | "Availability"
       | "Verification"
       | "Settings & privacy"
+      | "Security & password"
+      | "Language & region"
+      | "Connected apps"
+      | "Appearance"
+      | "About Orbitly"
       | "Creator support",
   ) => void;
 }) {
@@ -458,6 +583,11 @@ export function CreatorAppProfile({
               ["Availability", "calendar"],
               ["Verification", "shield"],
               ["Settings & privacy", "filter"],
+              ["Security & password", "shield"],
+              ["Language & region", "pin"],
+              ["Connected apps", "link"],
+              ["Appearance", "sparkles"],
+              ["About Orbitly", "user"],
               ["Creator support", "message"],
             ] as const
           ).map(([label, icon]) => (

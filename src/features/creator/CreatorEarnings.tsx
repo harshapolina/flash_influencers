@@ -441,10 +441,12 @@ export function CreatorEarningsScreen({
                 onBlur={() => setHoveredBar(null)}
                 onClick={() => setSelectedBar((prev) => (prev === i ? null : i))}
               >
-                <span className="earnings-bar-fill" style={{ height: `${h}%` }}>
-                  {isActive && (
-                    <b className="earnings-bar-tip">{formatMoney(amount)}</b>
-                  )}
+                <span className="earnings-bar-track">
+                  <span className="earnings-bar-fill" style={{ height: `${Math.max(h, 8)}%` }}>
+                    {isActive && (
+                      <b className="earnings-bar-tip">{formatMoney(amount)}</b>
+                    )}
+                  </span>
                 </span>
                 <small>{chart.labels[i]}</small>
               </button>

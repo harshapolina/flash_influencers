@@ -11,6 +11,11 @@ export type CreatorProfilePageId =
   | "Availability"
   | "Verification"
   | "Settings & privacy"
+  | "Security & password"
+  | "Language & region"
+  | "Connected apps"
+  | "Appearance"
+  | "About Orbitly"
   | "Creator support"
   | "Analytics";
 
@@ -321,6 +326,127 @@ export function CreatorProfilePage({
                 </small>
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {page === "Security & password" && (
+        <section className="creator-page-card">
+          <h2>Sign-in security</h2>
+          <div className="settings-rows">
+            <div>
+              <span>Email</span>
+              <strong>{state.user?.email || "—"}</strong>
+            </div>
+            <div>
+              <span>Password</span>
+              <strong>{state.user?.authProvider === "password" ? "Set" : "Managed by provider"}</strong>
+            </div>
+            <div>
+              <span>Email verified</span>
+              <strong>{state.user?.emailVerified ? "Yes" : "Pending"}</strong>
+            </div>
+          </div>
+          <p className="page-note">
+            Use Creator support if you need a password reset or to change your recovery email.
+          </p>
+        </section>
+      )}
+
+      {page === "Language & region" && (
+        <section className="creator-page-card">
+          <h2>Locale</h2>
+          <div className="settings-rows">
+            <div>
+              <span>Language</span>
+              <strong>English (India)</strong>
+            </div>
+            <div>
+              <span>Region</span>
+              <strong>{city || "India"}</strong>
+            </div>
+            <div>
+              <span>Currency</span>
+              <strong>INR (₹)</strong>
+            </div>
+          </div>
+          <p className="page-note">Campaign pay and payouts stay in Indian Rupees for this workspace.</p>
+        </section>
+      )}
+
+      {page === "Connected apps" && (
+        <section className="creator-page-card">
+          <h2>Integrations</h2>
+          <div className="creator-profile-menu flat profile-social-list">
+            {accounts.map((account) => (
+              <a key={account.platform} href={account.url} target="_blank" rel="noreferrer">
+                <span>
+                  <Icon
+                    name={account.platform === "youtube" ? "youtube" : "instagram"}
+                    size={17}
+                  />
+                </span>
+                <div className="profile-social-copy">
+                  <strong>{account.name || account.handle || account.platform}</strong>
+                  <small>
+                    {account.platform === "youtube" ? "YouTube" : "Instagram"} connected
+                  </small>
+                </div>
+                <Icon name="chevron" size={15} />
+              </a>
+            ))}
+            {!accounts.length && (
+              <div className="empty-inline">
+                <h3>No apps connected</h3>
+                <p>Connect Instagram or YouTube from Social accounts.</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {page === "Appearance" && (
+        <section className="creator-page-card">
+          <h2>Display</h2>
+          <div className="appearance-options creator-appearance-options">
+            <button type="button" className="active">
+              <strong>System</strong>
+              <small>Match device</small>
+            </button>
+            <button type="button">
+              <strong>Light</strong>
+              <small>Orbitly default</small>
+            </button>
+            <button type="button" disabled>
+              <strong>Dark</strong>
+              <small>Coming soon</small>
+            </button>
+          </div>
+          <p className="page-note">Creator surfaces currently use the light Orbitly theme.</p>
+        </section>
+      )}
+
+      {page === "About Orbitly" && (
+        <section className="creator-page-card about-orbitly-card">
+          <h2>Orbitly for creators</h2>
+          <p className="page-note">
+            Discover brand briefs, manage bookings, chat with partners, and track payouts in one place.
+          </p>
+          <div className="settings-rows">
+            <div>
+              <span>Product</span>
+              <strong>Orbitly Creator</strong>
+            </div>
+            <div>
+              <span>Support</span>
+              <strong>{supportEmail}</strong>
+            </div>
+          </div>
+          <div className="support-actions">
+            <button type="button" onClick={() => openSupport("About Orbitly")}>
+              <Icon name="message" size={16} />
+              Contact support
+            </button>
           </div>
         </section>
       )}

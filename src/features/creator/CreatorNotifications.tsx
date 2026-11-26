@@ -82,10 +82,15 @@ export function CreatorNotifications({
   }
 
   return (
-    <div className="screen creator-overlay-screen">
+    <div className="screen creator-overlay-screen creator-notifications-screen">
       <StatusBar />
       <header className="creator-overlay-head">
-        <button className="round-button" type="button" onClick={onBack}>
+        <button
+          className="round-button work-back-btn"
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+        >
           <Icon name="chevron" size={18} />
         </button>
         <div>
@@ -95,12 +100,13 @@ export function CreatorNotifications({
         <button
           className={`round-button ${filterKind === "unread" ? "active" : ""}`}
           type="button"
+          aria-label={filterKind === "unread" ? "Show all" : "Show unread"}
           onClick={() => setFilterKind((v) => (v === "all" ? "unread" : "all"))}
         >
           <Icon name="filter" size={17} />
         </button>
       </header>
-      <div className="pills creator-pills">
+      <div className="pills creator-pills creator-notif-pills">
         {(
           [
             ["all", "All"],
@@ -119,45 +125,48 @@ export function CreatorNotifications({
         ))}
       </div>
       <div className="creator-notif-list">
-        {list.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className="creator-notif-row"
-            onClick={() => {
-              if ("unread" in item && item.unread) {
-                void api.markMessageRead(item.id).then(() =>
-                  setMessages((prev) =>
-                    prev.map((m) => (m.id === item.id ? { ...m, unread: 0 } : m)),
-                  ),
-                );
-              }
-              if ("threadId" in item && item.threadId && onOpenThread) {
-                onOpenThread(item.threadId);
-                return;
-              }
-              if ("workJump" in item && item.workJump && onOpenWork) {
-                onOpenWork();
-                return;
-              }
-              if ("earningsJump" in item && item.earningsJump && onOpenEarnings) {
-                onOpenEarnings();
-              }
-            }}
-          >
-            <span className={`notif-icon ${item.kind}`}>
-              <Icon name={item.kind === "payout" ? "wallet" : "briefcase"} size={16} />
-            </span>
-            <div>
-              <strong>{item.title}</strong>
-              <p>{item.body}</p>
-              <small>{item.time}</small>
-            </div>
-            {"unread" in item && item.unread ? <b>{item.unread}</b> : null}
-          </button>
-        ))}
+        {list.map((item) => {
+          const unread = "unread" in item && item.unread ? Number(item.unread) : 0;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`creator-notif-row ${unread ? "is-unread" : ""}`}
+              onClick={() => {
+                if (unread) {
+                  void api.markMessageRead(item.id).then(() =>
+                    setMessages((prev) =>
+                      prev.map((m) => (m.id === item.id ? { ...m, unread: 0 } : m)),
+                    ),
+                  );
+                }
+                if ("threadId" in item && item.threadId && onOpenThread) {
+                  onOpenThread(item.threadId);
+                  return;
+                }
+                if ("workJump" in item && item.workJump && onOpenWork) {
+                  onOpenWork();
+                  return;
+                }
+                if ("earningsJump" in item && item.earningsJump && onOpenEarnings) {
+                  onOpenEarnings();
+                }
+              }}
+            >
+              <span className={`notif-icon ${item.kind}`}>
+                <Icon name={item.kind === "payout" ? "wallet" : "briefcase"} size={16} />
+              </span>
+              <div className="notif-copy">
+                <strong>{item.title}</strong>
+                <p>{item.body}</p>
+                <small>{item.time || "Just now"}</small>
+              </div>
+              {unread > 0 ? <b>{unread}</b> : <Icon name="chevron" size={14} />}
+            </button>
+          );
+        })}
         {!list.length && (
-          <div className="empty" style={{ paddingTop: 48 }}>
+          <div className="empty-inline creator-notif-empty">
             <h3>You’re all caught up</h3>
             <p>Brand bookings and payout updates will show here.</p>
           </div>

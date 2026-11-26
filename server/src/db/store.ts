@@ -2,6 +2,7 @@ import type {
   Booking,
   Campaign,
   ChatLine,
+  ChatMessage,
   CreatorProfile,
   Message,
   OtpRecord,
@@ -14,6 +15,7 @@ import {
   BookingModel,
   CampaignModel,
   ChatLineModel,
+  ChatMessageModel,
   CreatorModel,
   lean,
   MessageModel,
@@ -156,11 +158,30 @@ export const store = {
     return campaign;
   },
 
+  async updateCampaign(id: string, patch: Partial<Campaign>) {
+    const doc = await CampaignModel.findOneAndUpdate(
+      { id },
+      { $set: patch },
+      { new: true },
+    ).lean();
+    return lean<Campaign | null>(doc);
+  },
+
   async listBookings(filter: { brandUserId?: string; creatorId?: number } = {}) {
     const query: Record<string, unknown> = {};
     if (filter.brandUserId) query.brandUserId = filter.brandUserId;
     if (typeof filter.creatorId === "number") query.creatorId = filter.creatorId;
     return (await BookingModel.find(query).sort({ createdAt: -1 }).lean()).map((b) =>
+      lean<Booking>(b),
+    );
+  },
+
+  async listBookingsForCreator(creatorUserId: string, creatorId?: number) {
+    const filter =
+      creatorId != null
+        ? { $or: [{ creatorUserId }, { creatorId }] }
+        : { creatorUserId };
+    return (await BookingModel.find(filter).sort({ createdAt: -1 }).lean()).map((b) =>
       lean<Booking>(b),
     );
   },
@@ -196,6 +217,12 @@ export const store = {
     ).map((m) => lean<Message>(m));
   },
 
+  async findMessageByThread(userId: string, threadId: string) {
+    return lean<Message | null>(
+      await MessageModel.findOne({ userId, threadId }).lean(),
+    );
+  },
+
   async listChatLines(threadKey: string) {
     return (await ChatLineModel.find({ threadKey }).sort({ createdAt: 1 }).lean()).map((line) =>
       lean<ChatLine>(line),
@@ -209,6 +236,26 @@ export const store = {
 
   async createMessage(message: Message) {
     await MessageModel.create(message);
+    return message;
+  },
+
+  async updateMessage(id: string, patch: Partial<Message>) {
+    const doc = await MessageModel.findOneAndUpdate(
+      { id },
+      { $set: patch },
+      { new: true },
+    ).lean();
+    return lean<Message | null>(doc);
+  },
+
+  async listChatMessages(threadId: string) {
+    return (
+      await ChatMessageModel.find({ threadId }).sort({ createdAt: 1 }).lean()
+    ).map((m) => lean<ChatMessage>(m));
+  },
+
+  async createChatMessage(message: ChatMessage) {
+    await ChatMessageModel.create(message);
     return message;
   },
 
@@ -267,6 +314,14 @@ export const store = {
     return (await WorkItemModel.find({ creatorUserId }).lean()).map((w) => lean<WorkItem>(w));
   },
 
+  async findWorkItem(id: string) {
+    return lean<WorkItem | null>(await WorkItemModel.findOne({ id }).lean());
+  },
+
+  async findWorkByBooking(bookingId: string) {
+    return lean<WorkItem | null>(await WorkItemModel.findOne({ bookingId }).lean());
+  },
+
   async createWorkItem(item: WorkItem) {
     await WorkItemModel.create(item);
     return item;
@@ -319,12 +374,13 @@ export const store = {
   },
 
   async updatePrefs(userId: string, patch: Partial<UserPrefs>) {
+    await this.ensurePrefs(userId);
     const prefs = await PrefsModel.findOneAndUpdate(
       { userId },
-      { $set: patch, $setOnInsert: emptyPrefs(userId) },
-      { upsert: true, new: true },
+      { $set: patch },
+      { new: true },
     ).lean();
-    return lean<UserPrefs>(prefs);
+    return lean<UserPrefs>(prefs ?? (await this.ensurePrefs(userId)));
   },
 
   async toggleArrayId(userId: string, field: keyof UserPrefs, id: string | number) {
